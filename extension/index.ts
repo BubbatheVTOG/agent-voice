@@ -29,8 +29,13 @@ export default function agentVoiceExtension(pi: ExtensionAPI) {
 		sessionState.enabled = undefined;
 	});
 
-	const getConfig = (cwd: string) =>
-		resolveConfig({ cwd, session: sessionState, env: process.env });
+	const getConfig = (cwd: string, projectTrusted: boolean) =>
+		resolveConfig({
+			cwd,
+			session: sessionState,
+			env: process.env,
+			projectTrusted,
+		});
 
 	registerSpeakTool(pi, getConfig);
 	registerVoiceCommand(pi, {

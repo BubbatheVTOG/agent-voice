@@ -5,7 +5,9 @@ from pathlib import Path
 import torch
 from huggingface_hub import list_repo_files
 
-BASE = Path(os.environ["HF_HOME"])
+# Pin model downloads inside the repo tree (same isolation as agent-say.py).
+os.environ["HF_HOME"] = str(Path(__file__).resolve().parent.parent / "models")
+
 OUT = Path(__file__).parent
 LINE = "How do I sound? I am your agent's voice, running entirely on this machine."
 
@@ -26,6 +28,9 @@ p = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M", device="cpu")
 
 for i, v in enumerate(voices, 1):
     chunks: list[torch.Tensor] = [r.audio for r in p(LINE, voice=v) if r.audio is not None]
+    if not chunks:
+        print(f"[{i:02d}] {v}: no audio produced, skipped", flush=True)
+        continue
     a = (torch.cat(chunks).float().cpu().numpy() * 32767).clip(-32768, 32767).astype("<i2")
     path = OUT / f"{i:02d}-{v}.wav"
     with wave.open(str(path), "wb") as w:

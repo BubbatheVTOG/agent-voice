@@ -46,7 +46,7 @@ export function classify(text: string): Trigger | null {
 
 export function registerAutoAnnounce(
 	pi: ExtensionAPI,
-	getConfig: (cwd: string) => VoiceConfig,
+	getConfig: (cwd: string, projectTrusted: boolean) => VoiceConfig,
 ): void {
 	const notified = new Set<string>();
 
@@ -62,7 +62,7 @@ export function registerAutoAnnounce(
 		const trigger = text ? classify(text) : null;
 		if (!trigger) return;
 
-		const cfg = getConfig(ctx.cwd);
+		const cfg = getConfig(ctx.cwd, ctx.isProjectTrusted());
 		if (
 			!cfg.enabled ||
 			!cfg.autoAnnounce ||

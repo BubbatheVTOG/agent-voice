@@ -10,7 +10,7 @@ import type { VoiceConfig } from "./config";
 import { getPlaybackStatus, stopPlayback } from "./speak";
 
 interface Deps {
-	getConfig: (cwd: string) => VoiceConfig;
+	getConfig: (cwd: string, projectTrusted: boolean) => VoiceConfig;
 	setSessionEnabled: (v: boolean) => void;
 }
 
@@ -29,7 +29,7 @@ export function registerVoiceCommand(pi: ExtensionAPI, deps: Deps): void {
 		},
 		handler: async (args, ctx) => {
 			const sub = (args ?? "status").trim().toLowerCase();
-			const cfg = deps.getConfig(ctx.cwd);
+			const cfg = deps.getConfig(ctx.cwd, ctx.isProjectTrusted());
 
 			if (sub === "stop") {
 				const killed = stopPlayback();
@@ -42,11 +42,18 @@ export function registerVoiceCommand(pi: ExtensionAPI, deps: Deps): void {
 			}
 
 			if (sub === "on") {
+				if (cfg.envKill) {
+					ctx.ui.notify(
+						"voice: AGENT_VOICE_OFF=1 is set — the kill switch mutes everything. Unset it to use voice.",
+					"warning",
+					);
+					return;
+				}
 				deps.setSessionEnabled(true);
 				ctx.ui.notify(
-					"voice: ON for this session (manual speak + auto-announce follow their own switches)",
+					"voice: ON for this session (auto-announce additionally needs agentVoice.autoAnnounce)",
 					"info",
-				);
+					);
 				return;
 			}
 

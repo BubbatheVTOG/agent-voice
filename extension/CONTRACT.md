@@ -31,12 +31,17 @@ agent-say [text ...]                # or: echo "text" | agent-say
 - The `speak` tool runs:
 
   ```bash
-  spawn(bin, ["-v", voice, "-s", speed, ...words],
+  spawn(bin, ["-v", voice, "-s", speed, "--", ...words],
         { detached: true, stdio: ["ignore", "ignore", stderrFd] })
   ```
 
   each announcement is its own **process group**, so `stopPlayback()` can kill
   the whole group (python wrapper + `paplay`) — WCAG 1.4.2 (pausable audio).
+- The `--` separator ends option parsing: option-like words in the spoken
+  text (e.g. a quoted `-o PATH`) are spoken as words, never executed as CLI
+  options.
+- On a stop (`SIGTERM` to the process group) the backend still unlinks its
+  temp WAV before exiting.
 - stderr goes to a `0600` file under `$TMPDIR/agent-voice/`. A clean exit or
   a user stop deletes it; a failed run keeps it and records a `lastError`
   that `/voice status` surfaces — and the `speak` tool result reports

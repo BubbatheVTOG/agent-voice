@@ -4,15 +4,18 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-mapfile -t Wavs < <(fd -g '*.wav' . | sort)
+# -u: audition WAVs are gitignored (*.wav) and fd skips ignored files by
+# default — without it this lists nothing inside the repo.
+mapfile -t Wavs < <(fd -g -u '*.wav' . | sort)
 echo "${#Wavs[@]} voices. enter=next  r=replay  q=quit  s=stop  N=jump"
 echo
 
 i=0
 while [ "$i" -lt "${#Wavs[@]}" ]; do
     f="${Wavs[$i]}"
+    next=$((i + 1))
     while :; do
-        echo "▶ [$(printf '%02d' $((i + 1))/${#Wavs[@]})] ${f##*/}"
+        echo "▶ [$(printf '%02d' $((i + 1)))/${#Wavs[@]})] ${f##*/}"
         paplay "$f"
         read -rp "enter=next  r=replay  q=quit  s=stop  N=jump: " k
         case "$k" in
@@ -22,8 +25,8 @@ while [ "$i" -lt "${#Wavs[@]}" ]; do
         [0-9]*)
             n=$((10#$k))
             if [ "$n" -ge 1 ] && [ "$n" -le "${#Wavs[@]}" ]; then
-                i=$((n - 1))
-                break 2
+                next=$((n - 1))
+                break
             fi
             echo "out of range: $k"
             continue
@@ -34,6 +37,6 @@ while [ "$i" -lt "${#Wavs[@]}" ]; do
             ;;
         esac
     done
-    i=$((i + 1))
+    i=$next
 done
 echo "done."

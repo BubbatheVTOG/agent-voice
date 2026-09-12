@@ -135,9 +135,52 @@ test("invalid values at a layer are ignored; the next lower layer applies", () =
 		}),
 	);
 	const c = resolve({ homeDir: home, cwd: proj });
-	assert.equal(c.wordBudget, 60, "project 'many' invalid -> global 400 -> clamped to default cap");
+	assert.equal(
+		c.wordBudget,
+		60,
+		"project 'many' invalid -> global 400 -> clamped to default cap",
+	);
 	assert.equal(c.speed, 1.2);
 	assert.equal(c.longJobThresholdSec, 120);
-	assert.equal(c.enabled, false, "project null invalid -> not in global -> default");
+	assert.equal(
+		c.enabled,
+		false,
+		"project null invalid -> not in global -> default",
+	);
 	assert.equal(c.announceOn.length, 3);
+});
+
+test("unknown entries inside a valid announceOn are filtered, valid ones kept", () => {
+	const { home } = fixture({ announceOn: ["failure", "bogus", "needs-input"] });
+	const c = resolve({ homeDir: home });
+	assert.deepEqual(c.announceOn, ["failure", "needs-input"]);
+});
+
+test("an all-unknown announceOn never wins a layer (no silent disarm)", () => {
+	const { home, proj } = fixture(
+		{ announceOn: ["failure"] },
+		JSON.stringify({ agentVoice: { announceOn: ["needs-imput"] } }), // typo'd
+	);
+	const c = resolve({ homeDir: home, cwd: proj });
+	assert.deepEqual(
+		c.announceOn,
+		["failure"],
+		"project's all-unknown list is ignored; the global layer applies",
+	);
+	assert.equal(c.provenance.announceOn, "global");
+});
+
+test("AGENT_VOICE_OFF mutes only on the literal 1 (documented, deterministic)", () => {
+	const { home } = fixture({ enabled: true });
+	const withEnv = (val) => resolve({ homeDir: home, env: { AGENT_VOICE_OFF: val } });
+	assert.equal(withEnv("1").envKill, true);
+	assert.equal(withEnv("1").enabled, false);
+	assert.equal(withEnv("0").envKill, false);
+	assert.equal(withEnv("0").enabled, true);
+	assert.equal(withEnv("").envKill, false);
+	assert.equal(
+		withEnv("true").envKill,
+		false,
+		"the documented form is =1; other values are ignored by design",
+	);
 });

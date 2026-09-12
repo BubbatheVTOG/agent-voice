@@ -33,7 +33,11 @@ test("over the cap: truncated to the cap, full text saved 0600", () => {
 	assert.ok(r.fullTextPath, "full text path present");
 	assert.ok(r.fullTextPath.startsWith(DIR), "saved under $TMPDIR/agent-voice");
 	assert.equal(statSync(r.fullTextPath).mode & 0o777, 0o600, "file is 0600");
-	assert.equal(readFileSync(r.fullTextPath, "utf8"), words(80), "full original text preserved");
+	assert.equal(
+		readFileSync(r.fullTextPath, "utf8"),
+		words(80),
+		"full original text preserved",
+	);
 	rmSync(r.fullTextPath);
 });
 

@@ -84,12 +84,15 @@ const decoders: Record<ConfigKey, (v: unknown) => unknown> = {
 	wordHardCap: (v) => (isFiniteNum(v) && v >= 10 ? Math.floor(v) : undefined),
 	voice: (v) => (isNonEmptyStr(v) ? v : undefined),
 	speed: (v) => (isFiniteNum(v) && v > 0 ? v : undefined),
-	announceOn: (v) =>
-		Array.isArray(v) && v.length > 0
-			? (v.filter((x): x is Trigger =>
-					VALID_TRIGGERS.includes(x as Trigger),
-				) as Trigger[])
-			: undefined,
+	announceOn: (v) => {
+		if (!Array.isArray(v) || v.length === 0) return undefined;
+		const filtered = v.filter((x): x is Trigger =>
+			VALID_TRIGGERS.includes(x as Trigger),
+		);
+		// An all-unknown list must not win the layer — it would silently
+		// disarm auto-announce. Fall through like any other invalid value.
+		return filtered.length > 0 ? filtered : undefined;
+	},
 };
 
 function readAgentVoiceBlock(path: string): RawConfig {
@@ -129,7 +132,7 @@ export interface ResolveInput {
 	cwd: string;
 	session: { enabled?: boolean };
 	env: NodeJS.ProcessEnv;
-	/** Test seam: when true, skip the project layer (untrusted project). */
+	/** When false, the project layer is skipped (pi gates .pi/settings.json behind project trust). */
 	projectTrusted?: boolean;
 	homeDir?: string;
 }

@@ -69,7 +69,9 @@ Full example (project-level):
 
 Invalid values in a higher layer are ignored and fall through to the next
 lower layer (fail-closed; a malformed JSON file is treated as absent and
-never crashes pi).
+never crashes pi). For `announceOn` arrays, unknown trigger names are
+dropped; a list containing no valid names falls through entirely instead of
+silently disarming auto-announce.
 
 ## Config reference
 
@@ -91,7 +93,7 @@ never crashes pi).
 
 | Command | Effect |
 | --- | --- |
-| `/voice on` | enable manual speak for this session (in-memory) |
+| `/voice on` | enable manual speak for this session (in-memory; no effect while `AGENT_VOICE_OFF=1` is set) |
 | `/voice off` | disable for this session |
 | `/voice status` | resolved config + provenance + playing indicator + last TTS error (if any) |
 | `/voice stop` | kill ALL running announcements (whole process groups: python wrapper **and** paplay) |
@@ -159,12 +161,14 @@ the model staying silent for ordinary conversation was observed in practice.
 
 ## How it works
 
-- Each `speak` call spawns `agent-say -v <voice> -s <speed> <words>` as its
+- Each `speak` call spawns `agent-say -v <voice> -s <speed> -- <words>` as its
   own **detached process group** (`unref()`), so the model's turn is never
   blocked by playback, and **several announcements may be in flight at once** —
   the playback manager tracks every one of them, and `/voice stop` kills them
   all (`kill(-pid)` per group: python wrapper AND `paplay` child). Quitting a
-  session stops any in-flight announcement too (`session_shutdown` hook).
+  session stops any in-flight announcement too (`session_shutdown` hook). The
+  `--` separator keeps option-like words in the spoken text (e.g. a quoted
+  `-o`) from being parsed as CLI options.
 - **Failed TTS is diagnosable, not silent.** Every spawn's stderr goes to a
   0600 file under `/tmp/agent-voice/`. Clean exits and user-stopped runs delete
   it; a failed run (missing voice, OOM, non-executable binary) keeps it and
@@ -201,6 +205,11 @@ Headless (real `pi -p` + real TTS to the machine's speakers):
 - spawn failure: non-executable `AGENT_SAY_BIN` → `speak` returns
   "playback failed to start: … EACCES"; `lastError` recorded for /voice status
 - extension loads clean in a real pi boot; LSP clean across all files
+- audit E2E (2026-09-11): a finished announcement leaves the playback
+  manager (status truthful, no stale entries, stderr cleaned); option-like
+  spoken words (`-o PATH`) are spoken, never parsed as options; a user stop
+  leaks no backend temp WAVs; all-unknown `announceOn` falls through instead
+  of disarming
 
 **Not yet exercised (needs a live interactive TUI session):**
 

@@ -14,16 +14,18 @@ Usage:
 
 import argparse
 import os
+import signal
 import sys
 import tempfile
 import wave
 from pathlib import Path
 
-# Pin all HuggingFace model/voice downloads inside this tree.
-# __file__.resolve() follows symlinks, so this stays correct even when the
-# repo is installed via directory symlinks (see top-level install.sh).
+# Pin all HuggingFace model/voice downloads inside this tree — assigned
+# unconditionally so an ambient HF_HOME cannot break the single-directory
+# isolation. __file__.resolve() follows symlinks, so this stays correct even
+# when the repo is installed via directory symlinks (see top-level install.sh).
 BASE = Path(__file__).resolve().parent
-os.environ.setdefault("HF_HOME", str(BASE / "models"))
+os.environ["HF_HOME"] = str(BASE / "models")
 
 DEFAULT_VOICE = "af_aoede"
 SR = 24000  # Kokoro sample rate
@@ -75,6 +77,10 @@ def main():
         list_voices()
         return
 
+    # Reject 0, negatives and NaN before the ~5 s model load.
+    if not (args.speed > 0):
+        sys.exit("error: --speed must be a positive number")
+
     text = " ".join(args.text).strip()
     if not text:
         if not sys.stdin.isatty():
@@ -82,14 +88,12 @@ def main():
         if not text:
             sys.exit("error: no text given (arg or stdin)")
 
-    device = args.device
-    if device == "auto":
-        import torch
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-
     import torch
     from kokoro import KPipeline
-    from kokoro.model import KModel
+
+    device = args.device
+    if device == "auto":
+        device = "cuda" if torch.cuda.is_available() else "cpu"
 
     print(f"[agent-say] loading model on {device} (first run downloads ~330MB)",
           file=sys.stderr)
@@ -97,7 +101,6 @@ def main():
 
     print(f"[agent-say] synthesizing with voice={args.voice} speed={args.speed}",
           file=sys.stderr)
-    import torch
     chunks: list[torch.Tensor] = []
     for result in pipeline(text, voice=args.voice, speed=args.speed):
         a = result.audio
@@ -110,28 +113,44 @@ def main():
 
     if args.out:
         out = Path(args.out).expanduser()
-        with wave.open(str(out), "wb") as w:
-            w.setnchannels(1)
-            w.setsampwidth(2)
-            w.setframerate(SR)
-            w.writeframes(audio.tobytes())
+        # A bad -o path is a documented unhappy path — fail with one clean
+        # line (CONTRACT: diagnostics on stderr, non-zero exit).
+        try:
+            with open(out, "wb") as fh:
+                with wave.open(fh, "wb") as w:
+                    w.setnchannels(1)
+                    w.setsampwidth(2)
+                    w.setframerate(SR)
+                    w.writeframes(audio.tobytes())
+        except OSError as e:
+            sys.exit(f"error: cannot write {out}: {e}")
         print(f"[agent-say] wrote {out} ({len(audio) / SR:.2f}s)", file=sys.stderr)
         return
 
-    # Play through the default PulseAudio sink.
+    # Play through the default PulseAudio sink. /voice stop SIGTERMs the whole
+    # process group; the default disposition would skip `finally`, so convert
+    # SIGTERM into SystemExit and let the cleanup below run.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
     import subprocess
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
-        with wave.open(tf, "wb") as w:
-            w.setnchannels(1)
-            w.setsampwidth(2)
-            w.setframerate(SR)
-            w.writeframes(audio.tobytes())
-        tmp = tf.name
+    tmp = None
     try:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
+            tmp = tf.name
+            with wave.open(tf, "wb") as w:
+                w.setnchannels(1)
+                w.setsampwidth(2)
+                w.setframerate(SR)
+                w.writeframes(audio.tobytes())
         subprocess.run(["paplay", tmp], check=True)
     finally:
-        os.unlink(tmp)
+        if tmp:
+            os.unlink(tmp)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(130)
+    except Exception as e:
+        sys.exit(f"error: {type(e).__name__}: {e}")

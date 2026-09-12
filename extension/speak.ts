@@ -55,6 +55,9 @@ const active = new Set<ActivePlayback>();
 /** pids we SIGTERM'd via /voice stop — their non-zero exit is not an error. */
 const stoppedByUser = new Set<number>();
 
+/** Disambiguates same-millisecond temp-file names (concurrent spawns). */
+let fileSeq = 0;
+
 export interface LastError {
 	time: number;
 	summary: string;
@@ -143,11 +146,16 @@ export function speakText(text: string, cfg: VoiceConfig): number | null {
 	}
 	const dir = join(tmpdir(), "agent-voice");
 	mkdirSync(dir, { recursive: true });
-	const stderrPath = join(dir, `stderr-${Date.now()}.log`);
+	const stderrPath = join(
+		dir,
+		`stderr-${Date.now()}-${process.pid}-${fileSeq++}.log`,
+	);
 	const fd = openSync(stderrPath, "w", 0o600);
+	// "--" ends option parsing: option-like words in the spoken text (e.g.
+	// a quoted "-o PATH") must be spoken, never executed as CLI options.
 	const child = spawn(
 		bin,
-		["-v", cfg.voice, "-s", String(cfg.speed), ...text.split(/\s+/)],
+		["-v", cfg.voice, "-s", String(cfg.speed), "--", ...text.split(/\s+/)],
 		{ detached: true, stdio: ["ignore", "ignore", fd] },
 	);
 	// We passed the fd to the child; close our own copy (documented pattern).
@@ -175,6 +183,10 @@ export function speakText(text: string, cfg: VoiceConfig): number | null {
 			// signal; the `handled` flag is.
 			if (entry.handled) return;
 			entry.handled = true;
+			// A finished announcement must leave the manager: `active` drives
+			// isPlaying()/count, so a stale entry makes /voice status lie and
+			// /voice stop count dead pids.
+			active.delete(entry);
 			if (stoppedByUser.has(entry.pid)) {
 				stoppedByUser.delete(entry.pid);
 				tryUnlink(stderrPath);
@@ -221,7 +233,10 @@ export function enforceBudget(raw: string, cfg: VoiceConfig): Enforced {
 	}
 	const dir = join(tmpdir(), "agent-voice");
 	mkdirSync(dir, { recursive: true });
-	const fullTextPath = join(dir, `voice-${Date.now()}.txt`);
+	const fullTextPath = join(
+		dir,
+		`voice-${Date.now()}-${process.pid}-${fileSeq++}.txt`,
+	);
 	writeFileSync(fullTextPath, raw, { mode: 0o600 });
 	const kept = words.slice(0, cfg.wordHardCap).join(" ");
 	return {
@@ -245,7 +260,7 @@ const SPEAK_PARAMS = Type.Object({
 
 export function registerSpeakTool(
 	pi: ExtensionAPI,
-	getConfig: (cwd: string) => VoiceConfig,
+	getConfig: (cwd: string, projectTrusted: boolean) => VoiceConfig,
 ): void {
 	pi.registerTool({
 		name: "speak",
@@ -268,7 +283,7 @@ export function registerSpeakTool(
 		],
 		parameters: SPEAK_PARAMS,
 		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-			const cfg = getConfig(ctx.cwd);
+			const cfg = getConfig(ctx.cwd, ctx.isProjectTrusted());
 			const refuse = (reason: string) => ({
 				content: [
 					{ type: "text" as const, text: `Voice output not spoken: ${reason}` },
@@ -286,6 +301,9 @@ export function registerSpeakTool(
 				);
 
 			const enforced = enforceBudget(params.text, cfg);
+			if (!enforced.text) {
+				return refuse("no text to speak (input was empty or whitespace)");
+			}
 			const pid = speakText(enforced.text, cfg);
 			if (pid === null) {
 				const fail = getPlaybackStatus().lastError;
@@ -294,7 +312,11 @@ export function registerSpeakTool(
 				);
 			}
 
-			let text = `Spoke to the user via local TTS (${enforced.keptWords} words, voice=${cfg.voice}, speed=${cfg.speed}). Playback is non-blocking and stoppable via /voice stop.`;
+			let text =
+				`Announcement playback started (${enforced.keptWords} words, ` +
+				`voice=${cfg.voice}, speed=${cfg.speed}). It runs detached and is ` +
+				`stoppable via /voice stop; if synthesis fails after startup, the ` +
+				`error is recorded for /voice status (do not retry on that basis).`;
 			if (enforced.truncated && enforced.fullTextPath) {
 				text += ` Input exceeded the ${cfg.wordHardCap}-word hard cap: original was ${enforced.originalWords} words; full text saved to ${enforced.fullTextPath}.`;
 			} else if (enforced.keptWords > cfg.wordBudget) {
