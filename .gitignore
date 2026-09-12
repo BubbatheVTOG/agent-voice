@@ -1,0 +1,14 @@
+# TTS backend — built/downloaded, never committed
+tts/venv/
+tts/models/
+__pycache__/
+*.pyc
+
+# Node — declared deps resolve from the registry (see extension/package.json)
+node_modules/
+
+# Voice samples (regenerable: tts/audition/generate.py)
+*.wav
+
+# OS / editor
+.DS_Store

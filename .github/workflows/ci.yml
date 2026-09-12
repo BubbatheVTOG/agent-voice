@@ -1,0 +1,20 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.1.0 (pinned)
+      - uses: actions/setup-node@0a44ba7841725637a19e28fa30b79a866c81b0a6 # v4.0.4 (pinned)
+        with:
+          node-version: 24 # native TS type-stripping + node:test
+      - name: Extension dev deps (types only)
+        run: npm --prefix extension install
+      - name: Unit tests (config / classify / budget)
+        run: node --test tests/
+      - name: Python syntax
+        run: python3 -m py_compile tts/agent-say.py tts/audition/generate.py
