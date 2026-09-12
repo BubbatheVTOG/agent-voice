@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# agent-say — thin launcher. The implementation lives in ../agent-say.py
+# (repo source of truth); this file is never modified by install.sh.
+#
+# Resolves its own real location so it works from any path, including
+# through symlinks (~/.local/bin/agent-say -> this file).
+set -euo pipefail
+SRC="$(readlink -f "$0")"
+DIR="$(cd "$(dirname "$SRC")/.." && pwd)"
+exec "$DIR/venv/bin/python3" "$DIR/agent-say.py" "$@"
