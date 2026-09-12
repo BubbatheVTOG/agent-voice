@@ -1,0 +1,19 @@
+{
+	"name": "agent-voice",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"description": "Hands-free voice output for the pi coding agent — local Kokoro TTS, no cloud, no keys.",
+	"license": "MIT",
+	"scripts": {
+		"typecheck": "tsc --noEmit",
+		"test": "node --test ../tests/"
+	},
+	"devDependencies": {
+		"@earendil-works/pi-coding-agent": "^0.85.1",
+		"@earendil-works/pi-tui": "^0.85.1",
+		"@types/node": "^22.20.2",
+		"typebox": "^1.3.30",
+		"typescript": "^7.0.2"
+	}
+}
