@@ -172,7 +172,8 @@ test("an all-unknown announceOn never wins a layer (no silent disarm)", () => {
 
 test("AGENT_VOICE_OFF mutes only on the literal 1 (documented, deterministic)", () => {
 	const { home } = fixture({ enabled: true });
-	const withEnv = (val) => resolve({ homeDir: home, env: { AGENT_VOICE_OFF: val } });
+	const withEnv = (val) =>
+		resolve({ homeDir: home, env: { AGENT_VOICE_OFF: val } });
 	assert.equal(withEnv("1").envKill, true);
 	assert.equal(withEnv("1").enabled, false);
 	assert.equal(withEnv("0").envKill, false);

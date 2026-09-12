@@ -57,7 +57,9 @@ const wavCount = () => {
 	}
 };
 
-test("a finished announcement leaves the manager; option-like words are spoken, never parsed", { skip }, async () => {
+test("a finished announcement leaves the manager; option-like words are spoken, never parsed", {
+	skip,
+}, async () => {
 	cleanStaleStderr();
 	const INJECT = "/tmp/av-inject-guard.wav";
 	rmSync(INJECT, { force: true });
@@ -91,7 +93,9 @@ test("a finished announcement leaves the manager; option-like words are spoken, 
 	rmSync(INJECT, { force: true });
 });
 
-test("simultaneous announcements are all tracked and stoppable; a user stop leaks no temp WAVs (WCAG 1.4.2)", { skip }, async () => {
+test("simultaneous announcements are all tracked and stoppable; a user stop leaks no temp WAVs (WCAG 1.4.2)", {
+	skip,
+}, async () => {
 	cleanStaleStderr();
 	const wavsBase = wavCount();
 	const p1 = speakText(

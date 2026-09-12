@@ -45,7 +45,7 @@ export function registerVoiceCommand(pi: ExtensionAPI, deps: Deps): void {
 				if (cfg.envKill) {
 					ctx.ui.notify(
 						"voice: AGENT_VOICE_OFF=1 is set — the kill switch mutes everything. Unset it to use voice.",
-					"warning",
+						"warning",
 					);
 					return;
 				}
@@ -53,7 +53,7 @@ export function registerVoiceCommand(pi: ExtensionAPI, deps: Deps): void {
 				ctx.ui.notify(
 					"voice: ON for this session (auto-announce additionally needs agentVoice.autoAnnounce)",
 					"info",
-					);
+				);
 				return;
 			}
 
