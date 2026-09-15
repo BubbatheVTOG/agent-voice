@@ -18,6 +18,6 @@ jobs:
       - name: Extension dev deps (types only)
         run: npm --prefix extension install
       - name: Unit tests (config / classify / budget)
-        run: node --test tests/
+        run: node --test tests/*.test.mjs
       - name: Python syntax
         run: python3 -m py_compile tts/agent-say.py tts/audition/generate.py
