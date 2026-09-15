@@ -14,7 +14,7 @@
  *   voice-command.ts — /voice on|off|status|stop
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { resolveConfig, type Trigger } from "./config";
+import { DEFAULTS, resolveConfig, type Trigger } from "./config";
 import { registerSpeakTool, stopPlayback } from "./speak";
 import { registerVoiceCommand, type VoiceStatusContext } from "./voice-command";
 import { registerAutoAnnounce } from "./policy";
@@ -71,6 +71,12 @@ export default function agentVoiceExtension(pi: ExtensionAPI) {
 		setSessionEnabled: (v: boolean) => {
 			sessionState.enabled = v;
 			sessionState.autoAnnounce = v;
+			if (v) {
+				// `/voice on` is the safe, predictable opt-in: reset policy
+				// overrides to the documented built-in defaults for this session.
+				sessionState.longJobThresholdSec = DEFAULTS.longJobThresholdSec;
+				sessionState.announceOn = [...DEFAULTS.announceOn];
+			}
 		},
 		setSessionPolicy: (policy) => {
 			if (policy.longJobThresholdSec !== undefined)

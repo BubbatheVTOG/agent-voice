@@ -103,8 +103,8 @@ They do not modify settings files. Invalid values are rejected with a warning.
 
 | Command | Effect |
 | --- | --- |
-| `/voice on` | enable manual speak for this session (in-memory; no effect while `AGENT_VOICE_OFF=1` is set) |
-| `/voice off` | disable for this session |
+| `/voice on` | enable speech and auto-announce for this session, resetting policy to sane defaults (120s threshold and all triggers) |
+| `/voice off` | disable speech and auto-announce for this session; other policy values are retained until the next `/voice on` or session reset |
 | `/voice status` | resolved config + provenance + playing indicator + last TTS error (if any) |
 | `/voice stop` | kill ALL running announcements (whole process groups: python wrapper **and** paplay) |
 | `/voice autoAnnounce on\|off` | enable or disable automatic event nudges for this session |
