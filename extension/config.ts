@@ -130,7 +130,7 @@ function applyLayer(
 
 export interface ResolveInput {
 	cwd: string;
-	session: { enabled?: boolean };
+	session: { enabled?: boolean; autoAnnounce?: boolean };
 	env: NodeJS.ProcessEnv;
 	/** When false, the project layer is skipped (pi gates .pi/settings.json behind project trust). */
 	projectTrusted?: boolean;
@@ -160,7 +160,15 @@ export function resolveConfig(input: ResolveInput): VoiceConfig {
 		enabled = input.session.enabled;
 		provenance.enabled = "session";
 	}
-	if (envKill) provenance.enabled = "env";
+	let autoAnnounce = Boolean(values.autoAnnounce);
+	if (input.session.autoAnnounce !== undefined) {
+		autoAnnounce = input.session.autoAnnounce;
+		provenance.autoAnnounce = "session";
+	}
+	if (envKill) {
+		provenance.enabled = "env";
+		provenance.autoAnnounce = "env";
+	}
 
 	const wordHardCap = Math.max(
 		10,
@@ -173,7 +181,7 @@ export function resolveConfig(input: ResolveInput): VoiceConfig {
 
 	return {
 		enabled: envKill ? false : enabled,
-		autoAnnounce: envKill ? false : Boolean(values.autoAnnounce),
+		autoAnnounce: envKill ? false : autoAnnounce,
 		longJobThresholdSec:
 			Number(values.longJobThresholdSec) || DEFAULTS.longJobThresholdSec,
 		wordBudget,

@@ -22,7 +22,7 @@ import { registerAutoAnnounce } from "./policy";
 export default function agentVoiceExtension(pi: ExtensionAPI) {
 	// Per-session in-memory state. Reset on every session_start (pi rebinds
 	// extensions on session replacement; do not rely on state surviving it).
-	const sessionState: { enabled?: boolean } = {};
+	const sessionState: { enabled?: boolean; autoAnnounce?: boolean } = {};
 
 	const getConfig = (cwd: string, projectTrusted: boolean) =>
 		resolveConfig({
@@ -50,6 +50,7 @@ export default function agentVoiceExtension(pi: ExtensionAPI) {
 	pi.on("session_start", (_event, ctx) => {
 		// Session-level switches start unset (config decides) each session.
 		sessionState.enabled = undefined;
+		sessionState.autoAnnounce = undefined;
 		publishStatus(ctx);
 	});
 
@@ -62,6 +63,7 @@ export default function agentVoiceExtension(pi: ExtensionAPI) {
 		getConfig,
 		setSessionEnabled: (v: boolean) => {
 			sessionState.enabled = v;
+			sessionState.autoAnnounce = v;
 		},
 		publishStatus,
 	});

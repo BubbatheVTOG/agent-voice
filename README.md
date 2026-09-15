@@ -63,7 +63,9 @@ python3 -m py_compile tts/agent-say.py          # python syntax
 
 → `~/.pi/agent/settings.json` (global) or `.pi/settings.json` (per project).
 Precedence: `AGENT_VOICE_OFF=1` env (kill, beats all) > `/voice on|off`
-(session, in-memory) > project > global > defaults (off). `/voice status`
+(session, in-memory) > project > global > defaults (off). `/voice on` and
+`/voice off` link manual speech and automatic announcements together for the
+current session. `/voice status`
 shows the resolved config with per-key provenance; `/voice stop` kills running
 announcements. Full reference, the policy and its evidence:
 [extension/README.md](extension/README.md).

@@ -62,7 +62,7 @@ export function registerVoiceCommand(pi: ExtensionAPI, deps: Deps): void {
 				deps.setSessionEnabled(true);
 				deps.publishStatus?.(ctx);
 				ctx.ui.notify(
-					"voice: ON for this session (auto-announce additionally needs agentVoice.autoAnnounce)",
+					"voice: ON for this session (speech and automatic announcements)",
 					"info",
 				);
 				return;

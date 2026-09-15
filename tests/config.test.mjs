@@ -82,10 +82,27 @@ test("project layer wins over global; provenance is stamped per key", () => {
 });
 
 test("session off beats global on", () => {
-	const { home } = fixture({ enabled: true });
-	const c = resolve({ homeDir: home, session: { enabled: false } });
+	const { home } = fixture({ enabled: true, autoAnnounce: true });
+	const c = resolve({
+		homeDir: home,
+		session: { enabled: false, autoAnnounce: false },
+	});
 	assert.equal(c.enabled, false);
+	assert.equal(c.autoAnnounce, false);
 	assert.equal(c.provenance.enabled, "session");
+	assert.equal(c.provenance.autoAnnounce, "session");
+});
+
+test("session on links speech and automatic announcements", () => {
+	const { home } = fixture({ enabled: false, autoAnnounce: false });
+	const c = resolve({
+		homeDir: home,
+		session: { enabled: true, autoAnnounce: true },
+	});
+	assert.equal(c.enabled, true);
+	assert.equal(c.autoAnnounce, true);
+	assert.equal(c.provenance.enabled, "session");
+	assert.equal(c.provenance.autoAnnounce, "session");
 });
 
 test("AGENT_VOICE_OFF=1 wins over everything, including /voice on", () => {
