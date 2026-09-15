@@ -270,15 +270,16 @@ export function registerSpeakTool(
 			"WHEN TO USE — only when at least one is true for work YOU started in THIS session: " +
 			"(1) it is waiting on the user (needs input or a permission decision); " +
 			"(2) it failed or is blocked; " +
-			"(3) a long-running job (roughly >= 2 minutes) has just completed. " +
-			"WHEN NOT TO USE — quick jobs that succeeded, routine progress updates, anything the user can read in the transcript, and any work you did not initiate. " +
+			"(3) a long-running job (roughly >= 2 minutes) has just completed; or " +
+			"(4) a substantial user-requested task has just completed and completion announcements are enabled. " +
+			"WHEN NOT TO USE — quick routine replies, progress updates, anything the user can read without a meaningful task boundary, and any work you did not initiate. " +
 			"CONTENT — status word, one line of what happened, and where the details live (a file or log path). Under 45 words (hard limit 60; longer input is truncated and saved to a file whose path is returned). " +
 			"Never read out logs, code, commands, or secrets. " +
 			"The user can stop any announcement with /voice stop.",
 		promptSnippet:
-			"Speak short hands-free announcements via local TTS. Use ONLY for work you started this session that failed, is waiting on the user, or is a long job (>=2min) that just completed — never for quick successes. Under 45 words: [status] + what happened (one line) + where details live.",
+			"Speak short hands-free announcements via local TTS. Use for work you started this session that failed, is waiting on the user, is a long job (>=2min) that just completed, or is a substantial user-requested task that just completed with completion announcements enabled — never for routine replies. Under 45 words: [status] + what happened (one line) + where details live.",
 		promptGuidelines: [
-			"Use speak only for: work you initiated that needs the user's input, has failed, or is a long-running job that just completed. Never for quick successes or routine progress.",
+			"Use speak only for: work you initiated that needs the user's input, has failed, is a long-running job that just completed, or is a substantial user-requested task that just completed when completion announcements are enabled. Never for routine replies or progress updates.",
 			"Keep speak announcements under 45 words: [status] + what happened (one line) + where details live. Never put logs, code, commands, or secrets in a speak announcement.",
 		],
 		parameters: SPEAK_PARAMS,

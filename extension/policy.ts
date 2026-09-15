@@ -6,9 +6,10 @@
  * classes (failure, needs-input): when enabled, it injects a short, hidden
  * policy reminder so the model calls `speak` per the approved structure.
  *
- * Deliberately NOT handled here: "long-completion" success — the extension
- * cannot reliably measure job duration, and the policy hands that judgment to
- * the model via the speak tool's description (>= 2 min, session-initiated).
+ * Deliberately NOT handled here: successful completion announcements — the
+ * extension cannot reliably measure task scope or duration, and the policy
+ * hands that judgment to the model via the speak tool's description and the
+ * agent's AGENTS.md instructions.
  *
  * The hook never composes the announcement itself: the model writes the
  * summary, the speak tool enforces the hard word cap.

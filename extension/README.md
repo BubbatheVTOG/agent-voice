@@ -105,7 +105,8 @@ silently disarming auto-announce.
 1. **Needs the user's input/permission** → announce (highest priority)
 2. **Failed or blocked** → announce
 3. **Long-running (≥ ~2 min) completed** → announce a summary
-4. **Quick success, routine progress** → **silent. Always.**
+4. **Substantial user-requested task completed with completion announcements enabled** → announce a concise summary
+5. **Quick success, routine progress** → **silent. Always.**
 
 **Structure** — `[status word] + what happened (one line) + where details
 live (file/log path)`. Never read out logs, code, commands, or secrets.
