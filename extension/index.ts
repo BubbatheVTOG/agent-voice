@@ -16,18 +16,13 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { resolveConfig } from "./config";
 import { registerSpeakTool, stopPlayback } from "./speak";
-import { registerVoiceCommand } from "./voice-command";
+import { registerVoiceCommand, type VoiceStatusContext } from "./voice-command";
 import { registerAutoAnnounce } from "./policy";
 
 export default function agentVoiceExtension(pi: ExtensionAPI) {
 	// Per-session in-memory state. Reset on every session_start (pi rebinds
 	// extensions on session replacement; do not rely on state surviving it).
 	const sessionState: { enabled?: boolean } = {};
-
-	pi.on("session_start", (_event, _ctx) => {
-		// Session-level switches start unset (config decides) each session.
-		sessionState.enabled = undefined;
-	});
 
 	const getConfig = (cwd: string, projectTrusted: boolean) =>
 		resolveConfig({
@@ -37,12 +32,38 @@ export default function agentVoiceExtension(pi: ExtensionAPI) {
 			projectTrusted,
 		});
 
+	const publishStatus = (ctx: VoiceStatusContext): void => {
+		const cfg = getConfig(ctx.cwd, ctx.isProjectTrusted());
+		const color = cfg.envKill
+			? "\u001b[38;2;255;209;102m"
+			: cfg.enabled
+				? "\u001b[38;2;114;214;160m"
+				: "\u001b[38;2;139;149;167m";
+		const label = cfg.envKill
+			? "VOICE BLOCKED"
+			: cfg.enabled
+				? "VOICE ON"
+				: "VOICE OFF";
+		ctx.ui.setStatus("agent-voice", `${color}${label}\u001b[39m`);
+	};
+
+	pi.on("session_start", (_event, ctx) => {
+		// Session-level switches start unset (config decides) each session.
+		sessionState.enabled = undefined;
+		publishStatus(ctx);
+	});
+
+	pi.on("before_agent_start", (_event, ctx) => {
+		publishStatus(ctx);
+	});
+
 	registerSpeakTool(pi, getConfig);
 	registerVoiceCommand(pi, {
 		getConfig,
 		setSessionEnabled: (v: boolean) => {
 			sessionState.enabled = v;
 		},
+		publishStatus,
 	});
 	registerAutoAnnounce(pi, getConfig);
 

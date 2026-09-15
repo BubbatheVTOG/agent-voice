@@ -9,9 +9,18 @@ import type { AutocompleteItem } from "@earendil-works/pi-tui";
 import type { VoiceConfig } from "./config";
 import { getPlaybackStatus, stopPlayback } from "./speak";
 
+export interface VoiceStatusContext {
+	cwd: string;
+	isProjectTrusted(): boolean;
+	ui: {
+		setStatus(key: string, value: string): void;
+	};
+}
+
 interface Deps {
 	getConfig: (cwd: string, projectTrusted: boolean) => VoiceConfig;
 	setSessionEnabled: (v: boolean) => void;
+	publishStatus?: (ctx: VoiceStatusContext) => void;
 }
 
 const SUBCOMMANDS = ["on", "off", "status", "stop"] as const;
@@ -43,6 +52,7 @@ export function registerVoiceCommand(pi: ExtensionAPI, deps: Deps): void {
 
 			if (sub === "on") {
 				if (cfg.envKill) {
+					deps.publishStatus?.(ctx);
 					ctx.ui.notify(
 						"voice: AGENT_VOICE_OFF=1 is set — the kill switch mutes everything. Unset it to use voice.",
 						"warning",
@@ -50,6 +60,7 @@ export function registerVoiceCommand(pi: ExtensionAPI, deps: Deps): void {
 					return;
 				}
 				deps.setSessionEnabled(true);
+				deps.publishStatus?.(ctx);
 				ctx.ui.notify(
 					"voice: ON for this session (auto-announce additionally needs agentVoice.autoAnnounce)",
 					"info",
@@ -59,6 +70,7 @@ export function registerVoiceCommand(pi: ExtensionAPI, deps: Deps): void {
 
 			if (sub === "off") {
 				deps.setSessionEnabled(false);
+				deps.publishStatus?.(ctx);
 				ctx.ui.notify("voice: OFF for this session", "info");
 				return;
 			}
