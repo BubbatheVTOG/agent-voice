@@ -39,7 +39,7 @@ Precedence, highest wins:
 | Layer | How | Scope |
 | --- | --- | --- |
 | Kill switch | `AGENT_VOICE_OFF=1` (env) | process; mutes everything incl. `/voice on` |
-| Session | `/voice on` / `/voice off` | in-memory, this session only |
+| Session | `/voice on` / `/voice off` and `/voice <option> <value>` | in-memory, this session only |
 | Project | `agentVoice` in `<cwd>/.pi/settings.json` (trusted projects only) | project |
 | Global | `agentVoice` in `~/.pi/agent/settings.json` | all projects |
 | Defaults | both features `false` | — |
@@ -89,6 +89,16 @@ silently disarming auto-announce.
 `/voice status` prints the resolved config with **per-key provenance**
 (which layer set each value) — use it to debug "why is this on/off".
 
+Runtime policy controls are session-scoped and take effect immediately:
+
+```text
+/voice autoAnnounce on|off
+/voice threshold <seconds>
+/voice announceOn needs-input,failure,long-completion
+```
+
+They do not modify settings files. Invalid values are rejected with a warning.
+
 ## Commands
 
 | Command | Effect |
@@ -97,6 +107,9 @@ silently disarming auto-announce.
 | `/voice off` | disable for this session |
 | `/voice status` | resolved config + provenance + playing indicator + last TTS error (if any) |
 | `/voice stop` | kill ALL running announcements (whole process groups: python wrapper **and** paplay) |
+| `/voice autoAnnounce on\|off` | enable or disable automatic event nudges for this session |
+| `/voice threshold <seconds>` | set the session’s long-job guidance threshold |
+| `/voice announceOn <triggers>` | set comma-separated session triggers (`needs-input`, `failure`, `long-completion`) |
 
 ## The announcement policy (and why)
 
@@ -175,13 +188,15 @@ the model staying silent for ordinary conversation was observed in practice.
   it; a failed run (missing voice, OOM, non-executable binary) keeps it and
   records a `lastError` that `/voice status` surfaces — and the `speak` tool
   result says "playback failed to start: …" instead of a fake success.
-- The auto-announce hook watches `message_end` for user-role messages matching
-  failure / needs-input patterns (same shapes as pi's real "Background task
-  failed:" completion notifications). On a match — and only when enabled — it
+- The auto-announce hook watches real task notifications
+  (`customType: "subagent-notify"`), `TaskUpdate` tool completions, and
+  compatible user-role messages. It matches failure, needs-input, and
+  successful-completion candidates. On a match — and only when enabled — it
   injects a hidden (`display: false`) policy reminder as a `followUp` message
-  that rides the wake the completion message itself triggers; it does not
-  start an extra turn and does not compose the announcement (the model writes
-  it; the tool enforces the budget).
+  that rides the wake the completion message itself triggers. It does not
+  compose the announcement (the model writes it; the tool enforces the
+  budget). Successful completions remain model-filtered: quick tasks stay
+  silent, while long or substantial tasks may be announced.
 - Config is read live on every tool call / event (env kill switch included),
   so `export AGENT_VOICE_OFF=1` in your shell mutes pi started from it
   without any file edits.

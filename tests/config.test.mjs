@@ -187,6 +187,24 @@ test("an all-unknown announceOn never wins a layer (no silent disarm)", () => {
 	assert.equal(c.provenance.announceOn, "global");
 });
 
+test("session policy overrides are resolved with session provenance", () => {
+	const { home } = fixture({ autoAnnounce: false, longJobThresholdSec: 120 });
+	const c = resolve({
+		homeDir: home,
+		session: {
+			autoAnnounce: true,
+			longJobThresholdSec: 45,
+			announceOn: ["failure", "long-completion"],
+		},
+	});
+	assert.equal(c.autoAnnounce, true);
+	assert.equal(c.provenance.autoAnnounce, "session");
+	assert.equal(c.longJobThresholdSec, 45);
+	assert.equal(c.provenance.longJobThresholdSec, "session");
+	assert.deepEqual(c.announceOn, ["failure", "long-completion"]);
+	assert.equal(c.provenance.announceOn, "session");
+});
+
 test("AGENT_VOICE_OFF mutes only on the literal 1 (documented, deterministic)", () => {
 	const { home } = fixture({ enabled: true });
 	const withEnv = (val) =>

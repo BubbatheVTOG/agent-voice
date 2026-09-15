@@ -14,7 +14,7 @@
  *   voice-command.ts — /voice on|off|status|stop
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { resolveConfig } from "./config";
+import { resolveConfig, type Trigger } from "./config";
 import { registerSpeakTool, stopPlayback } from "./speak";
 import { registerVoiceCommand, type VoiceStatusContext } from "./voice-command";
 import { registerAutoAnnounce } from "./policy";
@@ -22,7 +22,12 @@ import { registerAutoAnnounce } from "./policy";
 export default function agentVoiceExtension(pi: ExtensionAPI) {
 	// Per-session in-memory state. Reset on every session_start (pi rebinds
 	// extensions on session replacement; do not rely on state surviving it).
-	const sessionState: { enabled?: boolean; autoAnnounce?: boolean } = {};
+	const sessionState: {
+		enabled?: boolean;
+		autoAnnounce?: boolean;
+		longJobThresholdSec?: number;
+		announceOn?: Trigger[];
+	} = {};
 
 	const getConfig = (cwd: string, projectTrusted: boolean) =>
 		resolveConfig({
@@ -51,6 +56,8 @@ export default function agentVoiceExtension(pi: ExtensionAPI) {
 		// Session-level switches start unset (config decides) each session.
 		sessionState.enabled = undefined;
 		sessionState.autoAnnounce = undefined;
+		sessionState.longJobThresholdSec = undefined;
+		sessionState.announceOn = undefined;
 		publishStatus(ctx);
 	});
 
@@ -64,6 +71,14 @@ export default function agentVoiceExtension(pi: ExtensionAPI) {
 		setSessionEnabled: (v: boolean) => {
 			sessionState.enabled = v;
 			sessionState.autoAnnounce = v;
+		},
+		setSessionPolicy: (policy) => {
+			if (policy.longJobThresholdSec !== undefined)
+				sessionState.longJobThresholdSec = policy.longJobThresholdSec;
+			if (policy.announceOn !== undefined)
+				sessionState.announceOn = policy.announceOn;
+			if (policy.autoAnnounce !== undefined)
+				sessionState.autoAnnounce = policy.autoAnnounce;
 		},
 		publishStatus,
 	});

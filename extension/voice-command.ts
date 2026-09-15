@@ -6,7 +6,7 @@
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
-import type { VoiceConfig } from "./config";
+import { VALID_TRIGGERS, type Trigger, type VoiceConfig } from "./config";
 import { getPlaybackStatus, stopPlayback } from "./speak";
 
 export interface VoiceStatusContext {
@@ -17,18 +17,72 @@ export interface VoiceStatusContext {
 	};
 }
 
+interface SessionPolicy {
+	autoAnnounce?: boolean;
+	longJobThresholdSec?: number;
+	announceOn?: Trigger[];
+}
+
 interface Deps {
 	getConfig: (cwd: string, projectTrusted: boolean) => VoiceConfig;
 	setSessionEnabled: (v: boolean) => void;
+	setSessionPolicy: (policy: SessionPolicy) => void;
 	publishStatus?: (ctx: VoiceStatusContext) => void;
 }
 
 const SUBCOMMANDS = ["on", "off", "status", "stop"] as const;
 
+function parseBoolean(value: string): boolean | undefined {
+	if (value === "on" || value === "true") return true;
+	if (value === "off" || value === "false") return false;
+	return undefined;
+}
+
+export function parsePolicy(
+	args: string,
+): { policy: SessionPolicy; label: string } | { error: string } | null {
+	const parts = args.trim().split(/\s+/);
+	if (parts.length < 2) return null;
+	const key = parts[0];
+	const value = parts.slice(1).join(" ");
+	if (key === "autoannounce" || key === "auto-announce") {
+		const parsed = parseBoolean(value);
+		return parsed === undefined
+			? { error: `autoAnnounce expects on|off, got "${value}"` }
+			: { policy: { autoAnnounce: parsed }, label: `autoAnnounce=${parsed}` };
+	}
+	if (key === "threshold" || key === "longjobthresholdsec") {
+		const parsed = Number(value);
+		return !Number.isFinite(parsed) || parsed <= 0
+			? { error: `threshold expects a positive number of seconds, got "${value}"` }
+			: { policy: { longJobThresholdSec: parsed }, label: `threshold=${parsed}s` };
+	}
+	if (key === "announceon" || key === "announce-on") {
+		const names = value
+			.split(",")
+			.map((item) => item.trim())
+			.filter(Boolean);
+		const triggers = names.filter((item): item is Trigger =>
+			(VALID_TRIGGERS as readonly string[]).includes(item),
+		);
+		if (triggers.length === 0 || triggers.length !== names.length)
+			return {
+				error: `announceOn expects comma-separated triggers: ${VALID_TRIGGERS.join(", ")}`,
+			};
+		return {
+			policy: { announceOn: triggers },
+			label: `announceOn=${triggers.join(",")}`,
+		};
+	}
+	return {
+		error: `unknown option "${key}" (use autoAnnounce, threshold, or announceOn)`,
+	};
+}
+
 export function registerVoiceCommand(pi: ExtensionAPI, deps: Deps): void {
 	pi.registerCommand("voice", {
 		description:
-			"agent-voice: /voice on|off|status|stop — control spoken announcements",
+			"agent-voice: /voice on|off|status|stop or /voice <option> <value> — control spoken announcements",
 		getArgumentCompletions: (prefix: string): AutocompleteItem[] | null => {
 			const items: AutocompleteItem[] = [];
 			for (const c of SUBCOMMANDS) {
@@ -37,7 +91,8 @@ export function registerVoiceCommand(pi: ExtensionAPI, deps: Deps): void {
 			return items.length > 0 ? items : null;
 		},
 		handler: async (args, ctx) => {
-			const sub = (args ?? "status").trim().toLowerCase();
+			const rawArgs = (args ?? "status").trim();
+			const sub = rawArgs.toLowerCase();
 			const cfg = deps.getConfig(ctx.cwd, ctx.isProjectTrusted());
 
 			if (sub === "stop") {
@@ -72,6 +127,25 @@ export function registerVoiceCommand(pi: ExtensionAPI, deps: Deps): void {
 				deps.setSessionEnabled(false);
 				deps.publishStatus?.(ctx);
 				ctx.ui.notify("voice: OFF for this session", "info");
+				return;
+			}
+
+			const parsedPolicy = parsePolicy(rawArgs);
+			if (parsedPolicy) {
+				if ("error" in parsedPolicy) {
+					ctx.ui.notify(`voice: ${parsedPolicy.error}`, "warning");
+					return;
+				}
+				if (cfg.envKill) {
+					ctx.ui.notify(
+						"voice: AGENT_VOICE_OFF=1 is set — policy changes are muted",
+						"warning",
+					);
+					return;
+				}
+				deps.setSessionPolicy(parsedPolicy.policy);
+				deps.publishStatus?.(ctx);
+				ctx.ui.notify(`voice: ${parsedPolicy.label} for this session`, "info");
 				return;
 			}
 
@@ -115,7 +189,7 @@ export function registerVoiceCommand(pi: ExtensionAPI, deps: Deps): void {
 			}
 
 			ctx.ui.notify(
-				`voice: unknown subcommand "${sub}" (use: on | off | status | stop)`,
+				`voice: unknown command "${sub}" (use: on | off | status | stop | <option> <value>)`,
 				"warning",
 			);
 		},

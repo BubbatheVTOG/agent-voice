@@ -25,11 +25,18 @@ test("needs-input shapes are classified", () => {
 	assert.equal(classify("waiting for the user's input"), "needs-input");
 });
 
-test("completions and ordinary conversation never trigger", () => {
+test("successful task completions are candidates for model filtering", () => {
 	assert.equal(
 		classify("Background task completed: **worker** (all green)"),
-		null,
+		"long-completion",
 	);
+	assert.equal(
+		classify("Detached foreground task completed: **worker**"),
+		"long-completion",
+	);
+});
+
+test("ordinary conversation and non-notification wording never trigger", () => {
 	assert.equal(classify("hello, how are you doing?"), null);
 	assert.equal(classify("the tests finished in 12 seconds, all passing"), null);
 });

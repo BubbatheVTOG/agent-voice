@@ -128,9 +128,16 @@ function applyLayer(
 	}
 }
 
+export interface SessionVoiceConfig {
+	enabled?: boolean;
+	autoAnnounce?: boolean;
+	longJobThresholdSec?: number;
+	announceOn?: Trigger[];
+}
+
 export interface ResolveInput {
 	cwd: string;
-	session: { enabled?: boolean; autoAnnounce?: boolean };
+	session: SessionVoiceConfig;
 	env: NodeJS.ProcessEnv;
 	/** When false, the project layer is skipped (pi gates .pi/settings.json behind project trust). */
 	projectTrusted?: boolean;
@@ -164,6 +171,14 @@ export function resolveConfig(input: ResolveInput): VoiceConfig {
 	if (input.session.autoAnnounce !== undefined) {
 		autoAnnounce = input.session.autoAnnounce;
 		provenance.autoAnnounce = "session";
+	}
+	if (input.session.longJobThresholdSec !== undefined) {
+		values.longJobThresholdSec = input.session.longJobThresholdSec;
+		provenance.longJobThresholdSec = "session";
+	}
+	if (input.session.announceOn !== undefined) {
+		values.announceOn = input.session.announceOn;
+		provenance.announceOn = "session";
 	}
 	if (envKill) {
 		provenance.enabled = "env";
