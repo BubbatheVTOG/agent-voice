@@ -26,8 +26,11 @@ agent-say [text ...]                # or: echo "text" | agent-say
 
 ## How the extension invokes it
 
-- Binary: `$AGENT_SAY_BIN` (if set and present, read **live** per call) or
-  `~/.local/bin/agent-say` (a symlink to `tts/bin/agent-say`).
+- Binary: `$AGENT_SAY_BIN` when set, otherwise `~/.local/bin/agent-say`.
+  It must resolve to a regular executable file; executable symlinks are allowed.
+  An invalid explicit override does not fall back to the default. The extension
+  checks this at startup before registering features and again before playback.
+  This does not prove model weights or audio hardware are ready.
 - The `speak` tool runs:
 
   ```bash

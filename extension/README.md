@@ -6,6 +6,13 @@ Speaks short, hands-free announcements to the user via **local** Kokoro TTS
 **Everything is OFF by default.** Voice is the most intrusive notification
 channel; both features are strictly opt-in.
 
+The extension registers no tools, commands, policy hooks, or footer item when
+its CLI backend is absent or not executable at startup. It checks
+`AGENT_SAY_BIN` when set, otherwise `~/.local/bin/agent-say`. An invalid explicit
+override disables loading rather than selecting another backend. Reload Pi after
+making the backend available. The check does not launch TTS, test audio hardware,
+or download models; backend availability does not itself enable speech.
+
 ## Layout
 
 ```
@@ -185,7 +192,7 @@ the model staying silent for ordinary conversation was observed in practice.
   `-o`) from being parsed as CLI options.
 - **Failed TTS is diagnosable, not silent.** Every spawn's stderr goes to a
   0600 file under `/tmp/agent-voice/`. Clean exits and user-stopped runs delete
-  it; a failed run (missing voice, OOM, non-executable binary) keeps it and
+  it; a failed run (missing voice or OOM) keeps it and
   records a `lastError` that `/voice status` surfaces — and the `speak` tool
   result says "playback failed to start: …" instead of a fake success.
 - The auto-announce hook watches real task notifications
@@ -218,8 +225,9 @@ Headless (real `pi -p` + real TTS to the machine's speakers):
 - stop E2E: two simultaneous announcements, both tracked (no orphaning),
   `stopPlayback` killed both groups, no stray `paplay`/`agent-say` left,
   no spurious error recorded, stderr logs cleaned up
-- spawn failure: non-executable `AGENT_SAY_BIN` → `speak` returns
-  "playback failed to start: … EACCES"; `lastError` recorded for /voice status
+- Historical spawn-failure check: non-executable `AGENT_SAY_BIN` produced
+  EACCES. The current guard rejects it before spawning; offline tests cover this
+  newer behavior.
 - extension loads clean in a real pi boot; LSP clean across all files
 - audit E2E (2026-09-11): a finished announcement leaves the playback
   manager (status truthful, no stale entries, stderr cleaned); option-like

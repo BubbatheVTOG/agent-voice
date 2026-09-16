@@ -24,7 +24,34 @@ tests/      node --test suites (units run always; TTS integration is gated)
 install.sh  one-shot installer for a machine (idempotent, re-runnable)
 ```
 
-## Install (idempotent — safe to re-run)
+## Install the Pi extension
+
+Use Pi's native Git package installation. Replace `COMMIT` with the reviewed
+commit you want to install:
+
+```bash
+pi install git:github.com/BubbatheVTOG/agent-voice@COMMIT
+```
+
+The package loads only `extension/index.ts`. It has no install hooks and does
+not install TTS, download voice models, start services, or create live symlinks.
+Pi provides its own host modules. Do not also load a copied or linked version of
+the extension.
+
+At startup, the extension checks for an executable `AGENT_SAY_BIN`, or
+`~/.local/bin/agent-say` when no override is set. Without it, no voice tool,
+command, policy hooks, or footer item register. An invalid explicit override
+does not fall back to another backend. After making the backend available,
+reload Pi to activate the extension; speech remains opt-in.
+
+This is a filesystem prerequisite check, not a test of audio-device or model
+readiness. Backend failures during playback still report an error.
+
+## Optional full local setup (legacy installer)
+
+Use the following only when you explicitly want the TTS backend and a linked
+source checkout instead of native package installation. Do not combine the two
+extension installation methods.
 
 ```bash
 ./install.sh
@@ -49,9 +76,10 @@ On another machine: clone, `./install.sh`, then `/reload` in pi.
 ## Develop & test
 
 ```bash
-node --test tests/                              # fast units: config, classify, budget
-AGENT_VOICE_E2E=1 node --test tests/playback.test.mjs   # real TTS: spawns, plays, kills
-npm --prefix extension run typecheck            # tsc --noEmit (deps installed by install.sh)
+npm --prefix extension ci --ignore-scripts --no-audit --no-fund
+npm --prefix extension test                     # offline tests; real TTS skipped by default
+AGENT_VOICE_E2E=1 node --test tests/playback.test.mjs   # opt-in real audio playback
+npm --prefix extension run typecheck            # tsc --noEmit
 python3 -m py_compile tts/agent-say.py          # python syntax
 ```
 

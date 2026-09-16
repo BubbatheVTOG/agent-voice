@@ -139,20 +139,23 @@ test("simultaneous announcements are all tracked and stoppable; a user stop leak
 	);
 });
 
-test("spawn failures are surfaced, never silent", { skip }, async () => {
-	const bad = join(mkdtempSync(join(tmpdir(), "av-bad-")), "agent-say");
+test("a non-executable backend is rejected before spawn", () => {
+	const directory = mkdtempSync(join(tmpdir(), "av-bad-"));
+	const bad = join(directory, "agent-say");
+	const previous = process.env.AGENT_SAY_BIN;
 	writeFileSync(bad, "#!/bin/sh\nexit 1\n");
-	chmodSync(bad, 0o000); // not executable -> spawn EACCES
+	chmodSync(bad, 0o000);
 	process.env.AGENT_SAY_BIN = bad;
 	try {
-		const pid = speakText("hello", CFG);
-		assert.equal(pid, null);
-		await sleep(1000); // the 'error' handler is async
+		assert.equal(speakText("hello", CFG), null);
 		const st = getPlaybackStatus();
 		assert.ok(st.lastError, "lastError recorded");
-		assert.match(st.lastError.summary, /failed to spawn|EACCES/i);
+		assert.match(st.lastError.summary, /not an executable file/i);
+		assert.equal(st.lastError.stderrPath, "");
 	} finally {
-		delete process.env.AGENT_SAY_BIN;
+		if (previous === undefined) delete process.env.AGENT_SAY_BIN;
+		else process.env.AGENT_SAY_BIN = previous;
 		chmodSync(bad, 0o644);
+		rmSync(directory, { recursive: true, force: true });
 	}
 });

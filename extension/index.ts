@@ -18,8 +18,11 @@ import { DEFAULTS, resolveConfig, type Trigger } from "./config";
 import { registerSpeakTool, stopPlayback } from "./speak";
 import { registerVoiceCommand, type VoiceStatusContext } from "./voice-command";
 import { registerAutoAnnounce } from "./policy";
+import { resolveAgentSayBin } from "./availability.ts";
 
 export default function agentVoiceExtension(pi: ExtensionAPI) {
+	if (!resolveAgentSayBin()) return;
+
 	// Per-session in-memory state. Reset on every session_start (pi rebinds
 	// extensions on session replacement; do not rely on state surviving it).
 	const sessionState: {

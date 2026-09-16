@@ -7,7 +7,7 @@
 	"license": "MIT",
 	"scripts": {
 		"typecheck": "tsc --noEmit",
-		"test": "node --test ../tests/"
+		"test": "node --experimental-vm-modules --test ../tests/*.test.mjs"
 	},
 	"devDependencies": {
 		"@earendil-works/pi-coding-agent": "^0.85.1",

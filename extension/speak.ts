@@ -13,33 +13,18 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import {
 	closeSync,
-	existsSync,
 	mkdirSync,
 	openSync,
 	readFileSync,
 	unlinkSync,
 	writeFileSync,
 } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { VoiceConfig } from "./config";
-
-/**
- * Resolve the TTS binary at call time (not module load) so AGENT_SAY_BIN can
- * be set live — the same "read live" stance as the AGENT_VOICE_OFF switch.
- */
-function agentSayBin(): string | null {
-	const candidates = [
-		process.env.AGENT_SAY_BIN,
-		join(homedir(), ".local", "bin", "agent-say"),
-	].filter((p): p is string => Boolean(p));
-	for (const p of candidates) {
-		if (p && existsSync(p)) return p;
-	}
-	return null;
-}
+import { resolveAgentSayBin } from "./availability.ts";
 
 // ── playback manager (module scope; may hold several concurrent announcements) ──
 
@@ -134,12 +119,12 @@ function tryUnlink(path: string): void {
  * Never throws for spawn failures — they are recorded via getPlaybackStatus().
  */
 export function speakText(text: string, cfg: VoiceConfig): number | null {
-	const bin = agentSayBin();
+	const bin = resolveAgentSayBin();
 	if (!bin) {
 		lastError = {
 			time: Date.now(),
 			summary:
-				"agent-say binary not found (expected ~/.local/bin/agent-say or $AGENT_SAY_BIN).",
+				"agent-say is not an executable file (expected ~/.local/bin/agent-say or $AGENT_SAY_BIN).",
 			stderrPath: "",
 		};
 		return null;
