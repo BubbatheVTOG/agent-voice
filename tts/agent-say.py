@@ -144,7 +144,7 @@ def main():
         subprocess.run(["paplay", tmp], check=True)
     finally:
         if tmp:
-            os.unlink(tmp)
+            Path(tmp).unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

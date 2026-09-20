@@ -147,7 +147,7 @@ export interface ResolveInput {
 export function resolveConfig(input: ResolveInput): VoiceConfig {
 	const home = input.homeDir ?? homedir();
 	const global = readAgentVoiceBlock(
-		join(home, ".pi", "agent", "settings.json"),
+		join(home, CONFIG_DIR_NAME, "agent", "settings.json"),
 	);
 	const project =
 		input.projectTrusted === false

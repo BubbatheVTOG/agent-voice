@@ -136,15 +136,24 @@ export function speakText(text: string, cfg: VoiceConfig): number | null {
 		`stderr-${Date.now()}-${process.pid}-${fileSeq++}.log`,
 	);
 	const fd = openSync(stderrPath, "w", 0o600);
-	// "--" ends option parsing: option-like words in the spoken text (e.g.
-	// a quoted "-o PATH") must be spoken, never executed as CLI options.
-	const child = spawn(
-		bin,
-		["-v", cfg.voice, "-s", String(cfg.speed), "--", ...text.split(/\s+/)],
-		{ detached: true, stdio: ["ignore", "ignore", fd] },
-	);
-	// We passed the fd to the child; close our own copy (documented pattern).
-	closeSync(fd);
+	let child: ChildProcess;
+	try {
+		// "--" ends option parsing: option-like words in the spoken text (e.g.
+		// a quoted "-o PATH") must be spoken, never executed as CLI options.
+		child = spawn(
+			bin,
+			["-v", cfg.voice, "-s", String(cfg.speed), "--", ...text.split(/\s+/)],
+			{ detached: true, stdio: ["ignore", "ignore", fd] },
+		);
+	} catch (error) {
+		const summary = error instanceof Error ? error.message : String(error);
+		recordError(`failed to spawn agent-say: ${summary}`, stderrPath);
+		return null;
+	} finally {
+		// We passed the fd to the child when spawn succeeded; either way, close
+		// our own copy so synchronous spawn failures cannot leak a descriptor.
+		closeSync(fd);
+	}
 	// Only added to `active` when a real pid exists, so a -1 pid can never be
 	// a kill target; the flag just coordinates the error/exit handlers below.
 	const entry: ActivePlayback = {
@@ -157,8 +166,8 @@ export function speakText(text: string, cfg: VoiceConfig): number | null {
 		// spawn failed (ENOENT etc.) — the child never ran, nothing to kill.
 		entry.handled = true;
 		active.delete(entry);
+		stoppedByUser.delete(entry.pid);
 		recordError(`failed to spawn agent-say: ${err.message}`, stderrPath);
-		tryUnlink(stderrPath);
 	});
 	if (child.pid !== undefined) {
 		active.add(entry);
