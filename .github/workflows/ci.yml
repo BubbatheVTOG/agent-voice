@@ -18,6 +18,7 @@ jobs:
       - name: Extension dev deps (types only)
         run: npm --prefix extension install
       - name: Unit tests (config / classify / budget)
-        run: node --test tests/*.test.mjs
+        # Same flag as extension/package.json "test": vm.SourceTextModule needs it on Node 24
+        run: npm --prefix extension test
       - name: Python syntax
         run: python3 -m py_compile tts/agent-say.py tts/audition/generate.py
