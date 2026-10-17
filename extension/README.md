@@ -113,7 +113,7 @@ They do not modify settings files. Invalid values are rejected with a warning.
 | `/voice on` | enable speech and auto-announce for this session, resetting policy to sane defaults (120s threshold and all triggers) |
 | `/voice off` | disable speech and auto-announce for this session; other policy values are retained until the next `/voice on` or session reset |
 | `/voice status` | resolved config + provenance + playing indicator + last TTS error (if any) |
-| `/voice stop` | kill ALL running announcements (whole process groups: python wrapper **and** paplay) |
+| `/voice stop` | kill ALL running announcements (whole process groups: python wrapper **and** paplay), and cancel the daemon's playback via `agent-say --cancel` |
 | `/voice autoAnnounce on\|off` | enable or disable automatic event nudges for this session |
 | `/voice threshold <seconds>` | set the session’s long-job guidance threshold |
 | `/voice announceOn <triggers>` | set comma-separated session triggers (`needs-input`, `failure`, `long-completion`) |
@@ -254,6 +254,6 @@ Headless (real `pi -p` + real TTS to the machine's speakers):
 - **New trigger**: add a classifier in `policy.ts` + an entry in
   `VALID_TRIGGERS` in `config.ts` + a bullet in the `speak` tool description
   (the model's policy lives there — keep the three in lockstep).
-- **Resident-server upgrade** (if 5 s cold start ever feels slow): run a
-  persistent TTS server and change the `spawn` to an HTTP call; the tool's
-  contract (budget, stop, config) is unchanged.
+- **Warm daemon** is built in: `agent-say` forwards to a resident process over
+  a private Unix socket and starts it on demand. Set `AGENT_SAY_DAEMON=0` to
+  disable it. The extension's contract (budget, stop, config) is unchanged.

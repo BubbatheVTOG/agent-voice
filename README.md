@@ -10,7 +10,8 @@ OFF by default; opt-in at every layer.**
 
 ```text
 tts/        local TTS backend (Python)
-  agent-say.py        the CLI (Kokoro pipeline, paplay playback, WAV export)
+  agent-say.py        the CLI (thin client; falls back to in-process synthesis)
+  agentsay/           audio helpers, ONNX synthesis, warm daemon, socket client
   bin/agent-say       thin launcher (repo files are never modified by install)
   install.sh          idempotent backend installer (venv + pinned deps)
   requirements.txt    frozen pins
@@ -58,8 +59,8 @@ extension installation methods.
 ```
 
 1. builds the TTS backend (`tts/install.sh`: a Python 3.11–3.13 venv + frozen
-   deps; the **first** TTS run auto-downloads ~330 MB of weights into
-   `tts/models/`, then it's fully offline)
+   deps; downloads and sha256-verifies ~120 MB of ONNX q8 weights and voices
+   into `tts/models/`, then it's fully offline)
 2. installs the extension's type-only dev deps
 3. **links the live locations into this repo** — this repo is the source of
    truth, the live paths are symlinks:
@@ -78,6 +79,7 @@ On another machine: clone, `./install.sh`, then `/reload` in pi.
 ```bash
 npm --prefix extension ci --ignore-scripts --no-audit --no-fund
 npm --prefix extension test                     # offline tests; real TTS skipped by default
+# The test script passes --experimental-vm-modules: availability.test.mjs needs vm.SourceTextModule (Node 24 gates it).
 AGENT_VOICE_E2E=1 node --test tests/playback.test.mjs   # opt-in real audio playback
 npm --prefix extension run typecheck            # tsc --noEmit
 python3 -m py_compile tts/agent-say.py          # python syntax

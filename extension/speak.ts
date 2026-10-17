@@ -10,7 +10,8 @@
  *   keep it and record a lastError surfaced by /voice status (clean runs and
  *   user-stopped runs clean up after themselves).
  */
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import {
 	closeSync,
 	mkdirSync,
@@ -43,6 +44,12 @@ const stoppedByUser = new Set<number>();
 /** Disambiguates same-millisecond temp-file names (concurrent spawns). */
 let fileSeq = 0;
 
+/**
+ * One owner token per extension process. The shared daemon scopes `--cancel`
+ * to this token, so /voice stop here never silences another pi session.
+ */
+const OWNER = randomUUID();
+
 export interface LastError {
 	time: number;
 	summary: string;
@@ -52,7 +59,8 @@ let lastError: LastError | null = null;
 
 /**
  * Kill every running announcement (whole process groups, incl. paplay).
- * Returns how many groups were signalled.
+ * The warm daemon plays audio outside these groups, so it is also asked to
+ * cancel. Returns how many groups were signalled.
  */
 export function stopPlayback(): number {
 	if (active.size === 0) return 0;
@@ -72,7 +80,22 @@ export function stopPlayback(): number {
 		}
 		killed++;
 	}
+	cancelDaemonPlayback();
 	return killed;
+}
+
+/** Best-effort: never starts the daemon, never throws, bounded wait. */
+function cancelDaemonPlayback(): void {
+	const bin = resolveAgentSayBin();
+	if (bin === null) return;
+	try {
+		spawnSync(bin, ["--owner", OWNER, "--cancel"], {
+			timeout: 500,
+			stdio: "ignore",
+		});
+	} catch {
+		/* daemon absent or unreachable: nothing to cancel */
+	}
 }
 
 export function isPlaying(): boolean {
@@ -142,7 +165,16 @@ export function speakText(text: string, cfg: VoiceConfig): number | null {
 		// a quoted "-o PATH") must be spoken, never executed as CLI options.
 		child = spawn(
 			bin,
-			["-v", cfg.voice, "-s", String(cfg.speed), "--", ...text.split(/\s+/)],
+			[
+				"--owner",
+				OWNER,
+				"-v",
+				cfg.voice,
+				"-s",
+				String(cfg.speed),
+				"--",
+				...text.split(/\s+/),
+			],
 			{ detached: true, stdio: ["ignore", "ignore", fd] },
 		);
 	} catch (error) {
