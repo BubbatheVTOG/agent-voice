@@ -76,7 +76,13 @@ On another machine: clone, `./install.sh`, then `/reload` in pi.
 
 ## Develop & test
 
+Two manifests, on purpose: the **root** `package.json` is the pi package manifest
+and owns runtime dependencies (`pino`), because `pi install` runs `npm install` in
+the package root. **extension/**`package.json` owns the dev tooling and the
+`test`/`typecheck` scripts.
+
 ```bash
+npm install --ignore-scripts --no-audit --no-fund          # runtime deps (pino)
 npm --prefix extension ci --ignore-scripts --no-audit --no-fund
 npm --prefix extension test                     # offline tests; real TTS skipped by default
 # The test script passes --experimental-vm-modules: availability.test.mjs needs vm.SourceTextModule (Node 24 gates it).

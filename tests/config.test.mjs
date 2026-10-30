@@ -1,6 +1,12 @@
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, rmSync, writeFileSync, mkdtempSync } from "node:fs";
+import {
+	mkdirSync,
+	rmSync,
+	utimesSync,
+	writeFileSync,
+	mkdtempSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveConfig } from "../extension/config.ts";
@@ -229,4 +235,65 @@ test("the default trigger set arms stopped as well as the three original names",
 		"needs-input",
 		"stopped",
 	]);
+});
+
+test("the global layer follows PI_CODING_AGENT_DIR like pi does", () => {
+	const home = mkdtempSync(join(tmpdir(), "av-home-"));
+	const agentDir = mkdtempSync(join(tmpdir(), "av-agentdir-"));
+	const proj = mkdtempSync(join(tmpdir(), "av-proj-"));
+	fixtures.push(home, agentDir, proj);
+	writeFileSync(
+		join(agentDir, "settings.json"),
+		JSON.stringify({ agentVoice: { enabled: true, wordBudget: 30 } }),
+	);
+
+	const c = resolve({
+		homeDir: home,
+		cwd: proj,
+		env: { PI_CODING_AGENT_DIR: agentDir },
+	});
+	assert.equal(c.enabled, true, "settings from the override dir are read");
+	assert.equal(c.wordBudget, 30);
+	assert.equal(c.provenance.enabled, "global");
+});
+
+test("a settings edit is picked up even though the parse is cached", () => {
+	const { home, proj } = fixture({ enabled: true });
+	const first = resolve({ homeDir: home, cwd: proj });
+	assert.equal(first.enabled, true);
+
+	const path = join(home, ".pi", "agent", "settings.json");
+	writeFileSync(path, JSON.stringify({ agentVoice: { enabled: false } }));
+	// mtime granularity can be coarse on some filesystems; make the change
+	// unambiguous rather than depending on the clock.
+	const now = Date.now() / 1000;
+	utimesSync(path, now + 5, now + 5);
+
+	const second = resolve({ homeDir: home, cwd: proj });
+	assert.equal(second.enabled, false, "the edited value wins");
+});
+
+test("the agent dir override expands ~ like pi's getAgentDir", () => {
+	const home = mkdtempSync(join(tmpdir(), "av-home-"));
+	const proj = mkdtempSync(join(tmpdir(), "av-proj-"));
+	fixtures.push(home, proj);
+	mkdirSync(join(home, "custom-agent"), { recursive: true });
+	writeFileSync(
+		join(home, "custom-agent", "settings.json"),
+		JSON.stringify({ agentVoice: { enabled: true } }),
+	);
+
+	const tilde = resolve({
+		homeDir: home,
+		cwd: proj,
+		env: { PI_CODING_AGENT_DIR: "~/custom-agent" },
+	});
+	assert.equal(tilde.enabled, true, "a ~ override reads the home-relative dir");
+
+	const bareTilde = resolve({
+		homeDir: home,
+		cwd: proj,
+		env: { PI_CODING_AGENT_DIR: "~" },
+	});
+	assert.equal(bareTilde.enabled, false, "a bare ~ means the home dir itself");
 });

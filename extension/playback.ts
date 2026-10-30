@@ -25,9 +25,8 @@ import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 import type { VoiceConfig } from "./config.ts";
 import { resolveAgentSayBin } from "./availability.ts";
-import { createLog, type Log } from "./log.ts";
+import { log } from "./log.ts";
 
-const log: Log = createLog();
 
 interface ActivePlayback {
 	/** -1 only when the spawn produced no pid; such an entry is never armed. */
@@ -40,6 +39,9 @@ interface ActivePlayback {
 	finished: boolean;
 }
 
+// Node runs these handlers on one event loop: the map/set mutations below are
+// synchronous, so a stop cannot interleave inside an exit handler. What can
+// double-fire is error-then-exit for the same entry, which `finished` absorbs.
 const active = new Set<ActivePlayback>();
 /** pids signalled by /voice stop — their non-zero exit is not a failure. */
 const stoppedByUser = new Set<number>();

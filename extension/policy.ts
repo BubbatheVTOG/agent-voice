@@ -15,9 +15,8 @@ import { randomUUID } from "node:crypto";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { ConfigFor, Trigger, VoiceConfig } from "./config.ts";
 import { SPEAK_GUIDANCE } from "./announcement.ts";
-import { createLog } from "./log.ts";
+import { log } from "./log.ts";
 
-const log = createLog();
 
 const FAILURE_RE = /background tasks? (has )?failed|task failed|run failed/i;
 const NEEDS_INPUT_RE =

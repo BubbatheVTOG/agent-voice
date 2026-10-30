@@ -5,12 +5,13 @@
  *   1. AGENT_VOICE_OFF=1 env kill switch (wins over everything, read live)
  *   2. session state (in-memory, set by /voice on|off)
  *   3. project  <cwd>/.pi/settings.json  → "agentVoice" (trusted projects only)
- *   4. global   ~/.pi/agent/settings.json → "agentVoice"
+ *   4. global   $PI_CODING_AGENT_DIR/settings.json, else ~/.pi/agent/settings.json
  *   5. defaults (both features OFF — voice is opt-in)
  */
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { CONFIG_DIR_NAME } from "@earendil-works/pi-coding-agent";
 
 export const VALID_TRIGGERS = [
@@ -96,16 +97,66 @@ const decoders: Record<ConfigKey, (v: unknown) => unknown> = {
 	},
 };
 
+interface CachedBlock {
+	mtimeMs: number;
+	block: RawConfig;
+}
+const blockCache = new Map<string, CachedBlock>();
+// A long-lived process can visit many project directories; keep the newest
+// few settings files rather than every path it ever resolved.
+const MAX_CACHED_SETTINGS = 8;
+
+/**
+ * The global layer is read on every message and tool call, so the parse is
+ * reused while the file's mtime is unchanged. A malformed file is treated as
+ * absent: config must never take the session down.
+ */
 function readAgentVoiceBlock(path: string): RawConfig {
+	let mtimeMs: number;
 	try {
-		if (!existsSync(path)) return {};
+		mtimeMs = statSync(path).mtimeMs;
+	} catch {
+		blockCache.delete(path);
+		return {};
+	}
+	const cached = blockCache.get(path);
+	if (cached?.mtimeMs === mtimeMs) return cached.block;
+	try {
 		const raw = JSON.parse(readFileSync(path, "utf8")) as {
 			agentVoice?: RawConfig;
 		};
-		return raw.agentVoice ?? {};
+		const block = raw.agentVoice ?? {};
+		rememberBlock(path, { mtimeMs, block });
+		return block;
 	} catch {
-		return {}; // malformed config is treated as absent (fail closed, never crash)
+		rememberBlock(path, { mtimeMs, block: {} });
+		return {};
 	}
+}
+
+function rememberBlock(path: string, entry: CachedBlock): void {
+	blockCache.delete(path);
+	blockCache.set(path, entry);
+	while (blockCache.size > MAX_CACHED_SETTINGS) {
+		const oldest = blockCache.keys().next().value;
+		if (oldest === undefined) return;
+		blockCache.delete(oldest);
+	}
+}
+
+/**
+ * Pi's agent directory. This mirrors pi's own `normalizePath` for the override:
+ * `~` and `~/x` expand, a `file://` URL is converted, and anything else is left
+ * exactly as written (pi does not resolve relative paths, so neither do we).
+ * Expanding differently would read a different file than the one pi writes.
+ */
+function agentDir(env: NodeJS.ProcessEnv, homeDir: string): string {
+	const override = env.PI_CODING_AGENT_DIR;
+	if (!override) return join(homeDir, CONFIG_DIR_NAME, "agent");
+	if (override === "~") return homeDir;
+	if (override.startsWith("~/")) return join(homeDir, override.slice(2));
+	if (override.startsWith("file://")) return fileURLToPath(override);
+	return override;
 }
 
 /**
@@ -148,7 +199,7 @@ export interface ResolveInput {
 export function resolveConfig(input: ResolveInput): VoiceConfig {
 	const home = input.homeDir ?? homedir();
 	const global = readAgentVoiceBlock(
-		join(home, CONFIG_DIR_NAME, "agent", "settings.json"),
+		join(agentDir(input.env, home), "settings.json"),
 	);
 	const project =
 		input.projectTrusted === false
@@ -186,6 +237,11 @@ export function resolveConfig(input: ResolveInput): VoiceConfig {
 		provenance.autoAnnounce = "env";
 	}
 
+	// applyLayer only ever stores values the decoders accepted, so this is a
+	// narrowing of a validated value, not an unverified cast.
+	const announceOn =
+		(values.announceOn as Trigger[] | undefined) ?? [...VALID_TRIGGERS];
+
 	const wordHardCap = Math.max(
 		10,
 		Math.floor(Number(values.wordHardCap) || DEFAULTS.wordHardCap),
@@ -204,7 +260,7 @@ export function resolveConfig(input: ResolveInput): VoiceConfig {
 		wordHardCap,
 		voice: String(values.voice),
 		speed: Number(values.speed) || DEFAULTS.speed,
-		announceOn: (values.announceOn as Trigger[]) ?? [...VALID_TRIGGERS],
+		announceOn,
 		provenance,
 		envKill,
 	};

@@ -222,3 +222,26 @@ test("a stale failure is cleared by the next successful announcement", async () 
 		}
 	}
 });
+
+test("interleaved spawns and stops leave no phantom state", async () => {
+	// Evidence for the reviewer's concurrency flag: 25 spawns, a stop in the
+	// middle of their exits, then 25 more. Nothing may leak: no entry stuck in
+	// the manager, no error recorded, no throw.
+	const fake = fakeBackend("exit 0");
+	const previous = process.env.AGENT_SAY_BIN;
+	process.env.AGENT_SAY_BIN = fake.bin;
+	try {
+		for (let i = 0; i < 25; i += 1) speakText(request(`first batch ${i}`));
+		stopPlayback();
+		for (let i = 0; i < 25; i += 1) speakText(request(`second batch ${i}`));
+		await settle(20_000);
+		const status = getPlaybackStatus();
+		assert.equal(status.count, 0, "no entry outlives its process");
+		assert.equal(status.playing, false);
+		assert.equal(status.lastError, null, "successful runs record nothing");
+	} finally {
+		if (previous === undefined) delete process.env.AGENT_SAY_BIN;
+		else process.env.AGENT_SAY_BIN = previous;
+		rmSync(fake.dir, { recursive: true, force: true });
+	}
+});

@@ -43,8 +43,9 @@ type PolicyParse =
 	| { error: string };
 
 function parseBoolean(value: string): boolean | undefined {
-	if (value === "on" || value === "true") return true;
-	if (value === "off" || value === "false") return false;
+	const normalized = value.trim().toLowerCase();
+	if (normalized === "on" || normalized === "true") return true;
+	if (normalized === "off" || normalized === "false") return false;
 	return undefined;
 }
 
@@ -158,12 +159,17 @@ interface ActionInput {
 type Action = (input: ActionInput) => void;
 
 function stopAction({ ctx }: ActionInput): void {
-	const result = stopPlayback();
-	const acted = result.signalled > 0 || result.cancelled;
-	ctx.ui.notify(
-		acted ? "voice: announcement stopped" : "voice: nothing is playing",
-		acted ? "info" : "warning",
-	);
+	const { signalled, cancelled } = stopPlayback();
+	if (signalled > 0) {
+		const plural = signalled === 1 ? "" : "s";
+		ctx.ui.notify(`voice: ${signalled} announcement${plural} stopped`, "info");
+		return;
+	}
+	if (cancelled) {
+		ctx.ui.notify("voice: daemon playback cancelled", "info");
+		return;
+	}
+	ctx.ui.notify("voice: nothing is playing", "warning");
 }
 
 function onAction({ cfg, ctx, deps }: ActionInput): void {
@@ -228,7 +234,8 @@ export function registerVoiceCommand(pi: ExtensionAPI, deps: Deps): void {
 			return items.length > 0 ? items : null;
 		},
 		handler: async (args, ctx: VoiceStatusContext) => {
-			const rawArgs = (args ?? "status").trim();
+			// `/voice` with no argument is the status view, not an error.
+			const rawArgs = (args ?? "").trim() || "status";
 			const input: ActionInput = {
 				cfg: deps.getConfig(ctx.cwd, ctx.isProjectTrusted()),
 				ctx,

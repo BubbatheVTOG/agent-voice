@@ -8,8 +8,10 @@
 export const ANNOUNCE_STRUCTURE =
 	"[status word] + what happened (one line) + where the details live (file or log path)";
 
+// Both numbers are defaults a user can change; the tool reports the effective
+// limit in its result, so the prose must not claim a fixed cap.
 export const ANNOUNCE_BUDGET =
-	"Under 45 words (hard limit 60; longer input is truncated and saved to a file whose path is returned)";
+	"Under 45 words (default hard limit 60; longer input is truncated and the full text saved to a file whose path is returned)";
 
 export const ANNOUNCE_PROHIBITIONS =
 	"Never read out logs, code, commands, or secrets.";
@@ -39,5 +41,5 @@ export const SPEAK_PROMPT_SNIPPET =
 
 export const SPEAK_PROMPT_GUIDELINES = [
 	"Use speak only for: work you initiated that needs the user's input, has failed, is a long-running job that just completed, or is a substantial user-requested task that just completed when completion announcements are enabled. Never for routine replies or progress updates.",
-	"Keep speak announcements under 45 words: [status] + what happened (one line) + where details live. Never put logs, code, commands, or secrets in a speak announcement.",
+	"Keep speak announcements under 45 words (default; the configured budget wins): [status] + what happened (one line) + where details live. Never put logs, code, commands, or secrets in a speak announcement.",
 ];

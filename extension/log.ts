@@ -6,8 +6,10 @@
  * `component` binding, and a `correlationId` supplied by the caller, so a
  * spoken announcement can be followed across spawn, exit, and cancel.
  *
- * Levels are diagnosis, not user output: `debug` is off unless
- * `AGENT_VOICE_LOG=debug` (or the older `AGENT_VOICE_DEBUG=1`) is set.
+ * Levels are diagnosis, not user output. pi does not redirect extension
+ * stderr: it is the terminal the TUI is drawing on, so the default is `warn`
+ * (a failure the user should know about) and `info`/`debug` are opt-in through
+ * `AGENT_VOICE_LOG`, or the older `AGENT_VOICE_DEBUG=1` for `debug`.
  * Announcement text is never logged; the redaction paths are a second line of
  * defence for fields that would otherwise carry user content.
  */
@@ -30,7 +32,7 @@ function isLevel(value: string): value is LogLevel {
 export function levelFromEnv(env: NodeJS.ProcessEnv): LogLevel {
 	const configured = (env.AGENT_VOICE_LOG ?? "").toLowerCase();
 	if (isLevel(configured)) return configured;
-	return env.AGENT_VOICE_DEBUG === "1" ? "debug" : "info";
+	return env.AGENT_VOICE_DEBUG === "1" ? "debug" : "warn";
 }
 
 export interface Fields {
@@ -50,17 +52,61 @@ export interface Log {
 	child(bindings: { correlationId: string }): Log;
 }
 
+/**
+ * A failed write is swallowed on purpose: the sink is diagnostics, and losing a
+ * record must never take down the session that was only trying to log. There is
+ * nowhere to report this failure without risking the same failure again.
+ */
+function safely(write: () => void): void {
+	try {
+		write();
+	} catch {
+		// unreportable by construction
+	}
+}
+
 function bind(logger: Logger): Log {
 	return {
-		debug: (fields) => logger.debug(fields),
-		info: (fields) => logger.info(fields),
-		warn: (fields) => logger.warn(fields),
-		error: (fields) => logger.error(fields),
-		child: (bindings) => bind(logger.child(bindings)),
+		debug: (fields) => safely(() => logger.debug(fields)),
+		info: (fields) => safely(() => logger.info(fields)),
+		warn: (fields) => safely(() => logger.warn(fields)),
+		error: (fields) => safely(() => logger.error(fields)),
+		child: (bindings) => {
+			try {
+				return bind(logger.child(bindings));
+			} catch {
+				return silentLog();
+			}
+		},
 	};
 }
 
-export function createLog(env: NodeJS.ProcessEnv = process.env): Log {
+/** A logger that discards everything, used when the real sink is unusable. */
+function silentLog(): Log {
+	const noop = (): void => {};
+	return { debug: noop, info: noop, warn: noop, error: noop, child: () => silentLog() };
+}
+
+export function createLog(
+	env: NodeJS.ProcessEnv = process.env,
+	destination?: pino.DestinationStream,
+): Log {
+	try {
+		return bind(buildLogger(env, destination));
+	} catch {
+		// Logging must never be the reason a session breaks: a host with no
+		// usable stderr gets silence, not a failed extension load.
+		return silentLog();
+	}
+}
+
+/** The process-wide sink: one destination, shared by every module. */
+export const log: Log = createLog();
+
+function buildLogger(
+	env: NodeJS.ProcessEnv,
+	destination: pino.DestinationStream | undefined,
+): Logger {
 	const logger = pino(
 		{
 			level: levelFromEnv(env),
@@ -73,8 +119,9 @@ export function createLog(env: NodeJS.ProcessEnv = process.env): Log {
 			},
 		},
 		// Synchronous writes: an extension can be torn down at any moment, and a
-		// lost last record is exactly the one worth having.
-		pino.destination({ dest: 2, sync: true }),
+		// lost last record is exactly the one worth having. Records are emitted
+		// per announcement and per policy decision, never per token.
+		destination ?? pino.destination({ dest: 2, sync: true }),
 	);
-	return bind(logger);
+	return logger;
 }

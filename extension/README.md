@@ -52,7 +52,7 @@ Precedence, highest wins:
 | Layer | How | Scope |
 | --- | --- | --- |
 | Kill switch | `AGENT_VOICE_OFF=1` (env) | process; mutes everything incl. `/voice on` |
-| Log level | `AGENT_VOICE_LOG` (env) | `silent`/`error`/`warn`/`info`/`debug`; default `info`. `AGENT_VOICE_DEBUG=1` is a shorthand for `debug`. Records are JSON lines on stderr with a UTC timestamp, level, event name, and correlation id; announcement text is never logged |
+| Log level | `AGENT_VOICE_LOG` (env) | `silent`/`error`/`warn`/`info`/`debug`; default `warn`, because pi leaves extension stderr attached to the terminal the TUI draws on. `AGENT_VOICE_DEBUG=1` is a shorthand for `debug`. Records are JSON lines on stderr with a UTC timestamp, level, event name, and correlation id; announcement text is never logged |
 | Session | `/voice on` / `/voice off` and `/voice <option> <value>` | in-memory, this session only |
 | Project | `agentVoice` in `<cwd>/.pi/settings.json` (trusted projects only) | project |
 | Global | `agentVoice` in `~/.pi/agent/settings.json` | all projects |
