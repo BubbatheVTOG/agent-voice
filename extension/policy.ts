@@ -22,6 +22,10 @@ const NEEDS_INPUT_RE =
 const COMPLETION_RE =
 	/^(?:background task|detached foreground task) completed:/i;
 
+// Completions that land together describe one moment of work; announcing each
+// would spend a model turn per notification. One nudge covers the burst.
+const NUDGE_COOLDOWN_MS = 5_000;
+
 function debug(reason: string): void {
 	if (process.env.AGENT_VOICE_DEBUG === "1")
 		console.error(`[agent-voice] policy ${reason}`);
@@ -52,30 +56,66 @@ export function classify(text: string): Trigger | null {
 	return null;
 }
 
+export function isArmed(cfg: VoiceConfig, trigger: Trigger): boolean {
+	return (
+		cfg.enabled &&
+		cfg.autoAnnounce &&
+		!cfg.envKill &&
+		cfg.announceOn.includes(trigger)
+	);
+}
+
+/**
+ * A task tick reports bookkeeping, not a job outcome. Only a run this hook
+ * watched from `in_progress` can clear the duration bar; a task completed
+ * without a recorded start has no duration to judge and stays silent.
+ */
+export function completionIsLong(job: {
+	status: string | undefined;
+	startedAt: number | undefined;
+	now: number;
+	thresholdSec: number;
+}): boolean {
+	const { status, startedAt, now, thresholdSec } = job;
+	if (status !== "completed") return false;
+	if (startedAt === undefined) return false;
+	return now - startedAt >= thresholdSec * 1000;
+}
+
+export function cooldownElapsed(
+	lastSentAt: number | undefined,
+	now: number,
+	cooldownMs = NUDGE_COOLDOWN_MS,
+): boolean {
+	return lastSentAt === undefined || now - lastSentAt >= cooldownMs;
+}
+
 export function registerAutoAnnounce(
 	pi: ExtensionAPI,
 	getConfig: (cwd: string, projectTrusted: boolean) => VoiceConfig,
 ): void {
 	const notified = new Set<string>();
+	const lastNudgeAt = new Map<Trigger, number>();
 	const taskUpdateArgs = new Map<string, { taskId?: string; status?: string }>();
+	const taskStartedAt = new Map<string, number>();
 
 	const nudge = (
 		trigger: Trigger,
 		cfg: VoiceConfig,
 		key: string,
 	): void => {
-		if (
-			!cfg.enabled ||
-			!cfg.autoAnnounce ||
-			cfg.envKill ||
-			!cfg.announceOn.includes(trigger)
-		)
-			return;
+		if (!isArmed(cfg, trigger)) return;
 		if (notified.has(key)) {
 			debug("ignored duplicate completion");
 			return;
 		}
 		notified.add(key);
+		const now = Date.now();
+		if (!cooldownElapsed(lastNudgeAt.get(trigger), now)) {
+			debug(`coalesced ${trigger} burst`);
+			return;
+		}
+		lastNudgeAt.set(trigger, now);
 		debug(`nudging ${trigger}`);
 
 		// Hidden policy nudge: rides the wake the completion itself triggers
@@ -101,10 +141,13 @@ export function registerAutoAnnounce(
 	pi.on("tool_execution_start", (event) => {
 		if (event.toolName !== "TaskUpdate") return;
 		const args = event.args as { taskId?: unknown; status?: unknown };
-		taskUpdateArgs.set(event.toolCallId, {
-			taskId: typeof args?.taskId === "string" ? args.taskId : undefined,
-			status: typeof args?.status === "string" ? args.status : undefined,
-		});
+		const taskId =
+			typeof args?.taskId === "string" ? args.taskId : undefined;
+		const status =
+			typeof args?.status === "string" ? args.status : undefined;
+		taskUpdateArgs.set(event.toolCallId, { taskId, status });
+		if (taskId && status === "in_progress")
+			taskStartedAt.set(taskId, Date.now());
 	});
 
 	pi.on("tool_execution_end", (event, ctx) => {
@@ -113,6 +156,21 @@ export function registerAutoAnnounce(
 		taskUpdateArgs.delete(event.toolCallId);
 		if (event.isError || args?.status !== "completed") return;
 		const cfg = getConfig(ctx.cwd, ctx.isProjectTrusted());
+		const startedAt = args.taskId
+			? taskStartedAt.get(args.taskId)
+			: undefined;
+		if (args.taskId) taskStartedAt.delete(args.taskId);
+		if (
+			!completionIsLong({
+				status: args.status,
+				startedAt,
+				now: Date.now(),
+				thresholdSec: cfg.longJobThresholdSec,
+			})
+		) {
+			debug("task tick below the long-job threshold");
+			return;
+		}
 		nudge("long-completion", cfg, `task-update:${event.toolCallId}`);
 	});
 
@@ -141,13 +199,6 @@ export function registerAutoAnnounce(
 		debug(`recognized ${trigger}`);
 
 		const cfg = getConfig(ctx.cwd, ctx.isProjectTrusted());
-		if (
-			!cfg.enabled ||
-			!cfg.autoAnnounce ||
-			cfg.envKill ||
-			!cfg.announceOn.includes(trigger)
-		)
-			return;
 		nudge(trigger, cfg, id || `message:${text}`);
 	});
 }

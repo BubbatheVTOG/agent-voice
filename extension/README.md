@@ -196,14 +196,21 @@ the model staying silent for ordinary conversation was observed in practice.
   records a `lastError` that `/voice status` surfaces — and the `speak` tool
   result says "playback failed to start: …" instead of a fake success.
 - The auto-announce hook watches real task notifications
-  (`customType: "subagent-notify"`), `TaskUpdate` tool completions, and
-  compatible user-role messages. It matches failure, needs-input, and
+  (`customType: "subagent-notify"`), `TaskUpdate` completions, and compatible
+  user-role messages. It matches failure, needs-input, and
   successful-completion candidates. On a match — and only when enabled — it
   injects a hidden (`display: false`) policy reminder as a `followUp` message
   that rides the wake the completion message itself triggers. It does not
   compose the announcement (the model writes it; the tool enforces the
-  budget). Successful completions remain model-filtered: quick tasks stay
-  silent, while long or substantial tasks may be announced.
+  budget).
+- A `TaskUpdate` tick is bookkeeping, not a job outcome, so it counts only when
+  the hook watched that task from `in_progress` for at least
+  `longJobThresholdSec` (120 s by default). Status ticks, and tasks that
+  completed without an observed start, stay silent — otherwise ticking off
+  four tasks in one turn spends four model turns saying nothing.
+- Completions that land within 5 s of the last nudge for the same trigger
+  collapse into one announcement, so a finishing burst costs one turn and one
+  sentence rather than one per job.
 - Config is read live on every tool call / event (env kill switch included),
   so `export AGENT_VOICE_OFF=1` in your shell mutes pi started from it
   without any file edits.
