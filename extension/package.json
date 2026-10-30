@@ -15,5 +15,8 @@
 		"@types/node": "^22.20.2",
 		"typebox": "^1.3.30",
 		"typescript": "^7.0.2"
+	},
+	"dependencies": {
+		"pino": "^10.4.0"
 	}
 }

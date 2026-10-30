@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { enforceBudget } from "../extension/speak.ts";
+import { enforceBudget } from "../extension/playback.ts";
 
 const cfg = (over = {}) => ({ wordBudget: 45, wordHardCap: 60, ...over });
 const words = (n) => Array.from({ length: n }, (_, i) => `word${i}`).join(" ");

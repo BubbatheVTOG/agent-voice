@@ -19,9 +19,14 @@ or download models; backend availability does not itself enable speech.
 ~/.pi/agent/extensions/agent-voice/
 ├── index.ts          # entry: wiring, per-session state
 ├── config.ts         # config resolution + provenance
-├── speak.ts          # `speak` tool + playback manager + word-budget enforcement
-├── policy.ts         # auto-announce nudge (failure / needs-input detection)
-├── voice-command.ts  # /voice on|off|status|stop
+├── availability.ts   # is the agent-say backend usable at all
+├── playback.ts       # spawn/stop/status of one announcement + word budget
+├── speak-tool.ts     # the `speak` tool: schema, budget, results
+├── policy.ts         # which outcomes announce + the hidden nudge
+├── voice-command.ts  # /voice on|off|status|stop and policy options
+├── announcement.ts   # the announcement contract, stated once
+├── log.ts            # structured logging seam (pino, JSON lines)
+├── package.json      # runtime deps (pino) + test/typecheck scripts
 └── README.md
 ```
 
@@ -35,9 +40,10 @@ TTS backend (separate, pre-existing): `~/.local/agent-say/` (venv + Kokoro-82M +
 2. **Auto-announce nudge** — when a background job the user initiated in this
    session **fails** or **needs the user's input/permission**, a hidden policy
    reminder is injected so the model calls `speak` with a compliant summary.
-   Long-job *success* announcements are the model's judgment (its tool
-   description carries the ≥2-minute policy) — the extension cannot reliably
-   measure job duration.
+   Long-job *success* announcements use the duration the notice reports
+   (`details.runs[].durationMs`): at or above `longJobThresholdSec` the model is
+   told to announce it and is given the duration; below it nothing is spoken.
+   Only a notice with no duration falls back to the model's judgment.
 
 ## Turning it on
 
@@ -46,6 +52,7 @@ Precedence, highest wins:
 | Layer | How | Scope |
 | --- | --- | --- |
 | Kill switch | `AGENT_VOICE_OFF=1` (env) | process; mutes everything incl. `/voice on` |
+| Log level | `AGENT_VOICE_LOG` (env) | `silent`/`error`/`warn`/`info`/`debug`; default `info`. `AGENT_VOICE_DEBUG=1` is a shorthand for `debug`. Records are JSON lines on stderr with a UTC timestamp, level, event name, and correlation id; announcement text is never logged |
 | Session | `/voice on` / `/voice off` and `/voice <option> <value>` | in-memory, this session only |
 | Project | `agentVoice` in `<cwd>/.pi/settings.json` (trusted projects only) | project |
 | Global | `agentVoice` in `~/.pi/agent/settings.json` | all projects |
@@ -69,7 +76,7 @@ Full example (project-level):
     "wordHardCap": 60,
     "voice": "af_aoede",
     "speed": 1.2,
-    "announceOn": ["needs-input", "failure", "long-completion"]
+    "announceOn": ["needs-input", "failure", "stopped", "long-completion"]
   }
 }
 ```
@@ -86,12 +93,12 @@ silently disarming auto-announce.
 | --- | --- | --- |
 | `enabled` | `false` | manual `speak` tool usable |
 | `autoAnnounce` | `false` | auto-announce nudge on job events |
-| `longJobThresholdSec` | `120` | guidance for the model: "long" job boundary (informational — the model makes the judgment) |
+| `longJobThresholdSec` | `120` | "long" job boundary: a notice that reports its own duration is announced at or above it and stays silent below it; only a notice with no duration falls back to model judgment |
 | `wordBudget` | `45` | soft word target (advisory in the tool result) |
 | `wordHardCap` | `60` | **hard** cap, enforced in the tool; clamps `wordBudget` from above (min 10) |
 | `voice` | `af_aoede` | passed to `agent-say -v`; `agent-say --list-voices` for the 54 open voices |
 | `speed` | `1.2` | passed to `agent-say -s` |
-| `announceOn` | all three | which auto-announce triggers are armed: `needs-input`, `failure`, `long-completion` |
+| `announceOn` | all four | which auto-announce triggers are armed: `needs-input`, `failure`, `stopped`, `long-completion` |
 
 `/voice status` prints the resolved config with **per-key provenance**
 (which layer set each value) — use it to debug "why is this on/off".
@@ -101,7 +108,7 @@ Runtime policy controls are session-scoped and take effect immediately:
 ```text
 /voice autoAnnounce on|off
 /voice threshold <seconds>
-/voice announceOn needs-input,failure,long-completion
+/voice announceOn needs-input,failure,stopped,long-completion
 ```
 
 They do not modify settings files. Invalid values are rejected with a warning.
@@ -116,17 +123,18 @@ They do not modify settings files. Invalid values are rejected with a warning.
 | `/voice stop` | kill ALL running announcements (whole process groups: python wrapper **and** paplay), and cancel the daemon's playback via `agent-say --cancel` |
 | `/voice autoAnnounce on\|off` | enable or disable automatic event nudges for this session |
 | `/voice threshold <seconds>` | set the session’s long-job guidance threshold |
-| `/voice announceOn <triggers>` | set comma-separated session triggers (`needs-input`, `failure`, `long-completion`) |
+| `/voice announceOn <triggers>` | set comma-separated session triggers (`needs-input`, `failure`, `stopped`, `long-completion`) |
 
 ## The announcement policy (and why)
 
 **Triggers** — announce only work the user initiated in this session:
 
 1. **Needs the user's input/permission** → announce (highest priority)
-2. **Failed or blocked** → announce
-3. **Long-running (≥ ~2 min) completed** → announce a summary
-4. **Substantial user-requested task completed with completion announcements enabled** → announce a concise summary
-5. **Quick success, routine progress** → **silent. Always.**
+2. **Failed or blocked** → announce, whatever the duration
+3. **Stopped or paused before finishing** → announce, whatever the duration
+4. **Long-running (≥ ~2 min) completed** → announce a summary
+5. **Substantial user-requested task completed with completion announcements enabled** → announce a concise summary
+6. **Quick success, routine progress** → **silent. Always.**
 
 **Structure** — `[status word] + what happened (one line) + where details
 live (file/log path)`. Never read out logs, code, commands, or secrets.
@@ -186,15 +194,19 @@ the model staying silent for ordinary conversation was observed in practice.
   own **detached process group** (`unref()`), so the model's turn is never
   blocked by playback, and **several announcements may be in flight at once** —
   the playback manager tracks every one of them, and `/voice stop` kills them
-  all (`kill(-pid)` per group: python wrapper AND `paplay` child). Quitting a
-  session stops any in-flight announcement too (`session_shutdown` hook). The
-  `--` separator keeps option-like words in the spoken text (e.g. a quoted
-  `-o`) from being parsed as CLI options.
+  all (`kill(-pid)` per group: python wrapper AND `paplay` child). It also
+  always asks the shared daemon to cancel for this process's owner token, because
+  daemon playback runs outside the process group and is exactly what survives a
+  group that already exited. Quitting a session stops any in-flight announcement
+  too (`session_shutdown` hook). The `--` separator keeps option-like words in
+  the spoken text (e.g. a quoted `-o`) from being parsed as CLI options.
 - **Failed TTS is diagnosable, not silent.** Every spawn's stderr goes to a
   0600 file under `/tmp/agent-voice/`. Clean exits and user-stopped runs delete
-  it; a failed run (missing voice or OOM) keeps it and
-  records a `lastError` that `/voice status` surfaces — and the `speak` tool
-  result says "playback failed to start: …" instead of a fake success.
+  it and clear any earlier `lastError`; a failed run (missing voice or OOM) keeps
+  it and records a `lastError` that `/voice status` surfaces — and the `speak`
+  tool result says "playback failed to start: …" instead of a fake success.
+  Spawn, exit, and cancel each emit one structured record (correlation id,
+  monotonic elapsed) through `log.ts`.
 - The auto-announce hook watches real task notifications
   (`customType: "subagent-notify"`), `TaskUpdate` completions, and compatible
   user-role messages. It matches failure, needs-input, and
@@ -211,6 +223,14 @@ the model staying silent for ordinary conversation was observed in practice.
 - Completions that land within 5 s of the last nudge for the same trigger
   collapse into one announcement, so a finishing burst costs one turn and one
   sentence rather than one per job.
+- A notice's `details.runs[]` decides what happened: `failed` announces,
+  `paused`/`stopped` announces as `stopped`, and a completion announces only
+  when its `durationMs` clears `longJobThresholdSec`, which the nudge then
+  quotes. Status comes from that data, not from the message body, so a
+  completion whose summary mentions a failure stays a completion. Only a notice
+  with no structured runs (an older sender, another extension, a plain user
+  message) falls back to headline pattern matching, where the headline alone is
+  read.
 - Config is read live on every tool call / event (env kill switch included),
   so `export AGENT_VOICE_OFF=1` in your shell mutes pi started from it
   without any file edits.

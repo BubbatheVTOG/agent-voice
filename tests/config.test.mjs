@@ -37,7 +37,7 @@ test("defaults when nothing is configured (both features off)", () => {
 	assert.equal(c.wordBudget, 45);
 	assert.equal(c.wordHardCap, 60);
 	assert.equal(c.longJobThresholdSec, 120);
-	assert.equal(c.announceOn.length, 3);
+	assert.equal(c.announceOn.length, 4);
 	assert.equal(c.envKill, false);
 	assert.equal(c.speed, 1.2);
 	assert.equal(c.voice, "af_aoede");
@@ -164,7 +164,7 @@ test("invalid values at a layer are ignored; the next lower layer applies", () =
 		false,
 		"project null invalid -> not in global -> default",
 	);
-	assert.equal(c.announceOn.length, 3);
+	assert.equal(c.announceOn.length, 4);
 });
 
 test("unknown entries inside a valid announceOn are filtered, valid ones kept", () => {
@@ -219,4 +219,14 @@ test("AGENT_VOICE_OFF mutes only on the literal 1 (documented, deterministic)", 
 		false,
 		"the documented form is =1; other values are ignored by design",
 	);
+});
+
+test("the default trigger set arms stopped as well as the three original names", () => {
+	const c = resolve({ homeDir: "/nonexistent-home" });
+	assert.deepEqual([...c.announceOn].sort(), [
+		"failure",
+		"long-completion",
+		"needs-input",
+		"stopped",
+	]);
 });

@@ -63,13 +63,20 @@ async function registrations(available) {
     "./availability.ts": {
       resolveAgentSayBin: () => (available ? "/fixture/agent-say" : null),
     },
-    "./config": { DEFAULTS: {}, resolveConfig: () => ({}) },
-    "./speak": {
+    "./config.ts": { DEFAULTS: { longJobThresholdSec: 120, announceOn: [] }, resolveConfig: () => ({}) },
+    "./speak-tool.ts": {
       registerSpeakTool: () => calls.push("speak"),
-      stopPlayback: () => {},
     },
-    "./voice-command": { registerVoiceCommand: () => calls.push("voice") },
-    "./policy": { registerAutoAnnounce: () => calls.push("policy") },
+    "./playback.ts": {
+      stopPlayback: () => ({ signalled: 0, cancelled: false }),
+    },
+    "./voice-command.ts": { registerVoiceCommand: () => calls.push("voice") },
+    "./policy.ts": {
+      registerAutoAnnounce: () => {
+        calls.push("policy");
+        return { reset: () => calls.push("policy.reset") };
+      },
+    },
   };
   const source = readFileSync(
     new URL("../extension/index.ts", import.meta.url),

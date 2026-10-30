@@ -16,6 +16,7 @@ import { CONFIG_DIR_NAME } from "@earendil-works/pi-coding-agent";
 export const VALID_TRIGGERS = [
 	"needs-input",
 	"failure",
+	"stopped",
 	"long-completion",
 ] as const;
 export type Trigger = (typeof VALID_TRIGGERS)[number];
@@ -208,3 +209,9 @@ export function resolveConfig(input: ResolveInput): VoiceConfig {
 		envKill,
 	};
 }
+
+/**
+ * The resolver every module receives from `index.ts`: config is re-read per
+ * call because the environment kill switch and settings edits apply live.
+ */
+export type ConfigFor = (cwd: string, projectTrusted: boolean) => VoiceConfig;
