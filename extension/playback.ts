@@ -14,9 +14,10 @@ import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
 	closeSync,
+	fstatSync,
 	mkdirSync,
 	openSync,
-	readFileSync,
+	readSync,
 	unlinkSync,
 	writeFileSync,
 } from "node:fs";
@@ -153,11 +154,27 @@ export function getPlaybackStatus(): {
 	return { playing: isPlaying(), count: active.size, lastError };
 }
 
+/** The last few KiB of a child's stderr: a backend may print unbounded output. */
+const STDERR_TAIL_BYTES = 4096;
+
+function stderrTail(path: string): string {
+	const fd = openSync(path, "r");
+	try {
+		const { size } = fstatSync(fd);
+		const length = Math.min(size, STDERR_TAIL_BYTES);
+		const buffer = Buffer.alloc(length);
+		readSync(fd, buffer, 0, length, size - length);
+		return buffer.toString("utf8");
+	} finally {
+		closeSync(fd);
+	}
+}
+
 /** Record a failed spawn/exit so /voice status can surface it. */
 function recordError(summary: string, stderrPath: string): void {
 	let tail = "";
 	try {
-		tail = readFileSync(stderrPath, "utf8")
+		tail = stderrTail(stderrPath)
 			.trim()
 			.split("\n")
 			.slice(-2)
@@ -351,7 +368,24 @@ export function enforceBudget(raw: string, cfg: VoiceConfig): Enforced {
 		};
 	}
 	const fullTextPath = tempName("voice", "txt");
-	writeFileSync(fullTextPath, raw, { mode: 0o600 });
+	try {
+		writeFileSync(fullTextPath, raw, { mode: 0o600 });
+	} catch (error) {
+		// Announcing the capped text matters more than archiving the overflow:
+		// say the short version and let the caller report the missing file.
+		log.warn({
+			event: "budget.save",
+			outcome: "error",
+			summary: error instanceof Error ? error.message : String(error),
+		});
+		return {
+			text: words.slice(0, cfg.wordHardCap).join(" "),
+			originalWords: words.length,
+			keptWords: cfg.wordHardCap,
+			truncated: true,
+			fullTextPath: null,
+		};
+	}
 	return {
 		text: words.slice(0, cfg.wordHardCap).join(" "),
 		originalWords: words.length,

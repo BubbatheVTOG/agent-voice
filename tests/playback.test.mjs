@@ -245,3 +245,28 @@ test("interleaved spawns and stops leave no phantom state", async () => {
 		rmSync(fake.dir, { recursive: true, force: true });
 	}
 });
+
+test("a chatty backend cannot make lastError unbounded", async () => {
+	// 200 KB of stderr and a non-zero exit: the recorded summary keeps only the
+	// tail, so /voice status stays readable and memory stays flat.
+	const fake = fakeBackend(
+		'yes "verbose diagnostic line" | head -c 200000 >&2\necho "final line" >&2\nexit 1',
+	);
+	const previous = process.env.AGENT_SAY_BIN;
+	process.env.AGENT_SAY_BIN = fake.bin;
+	try {
+		speakText(request("chatty backend"));
+		await settle(20_000);
+		const failure = getPlaybackStatus().lastError;
+		assert.ok(failure, "failure recorded");
+		assert.equal(failure.summary.includes("final line"), true, "tail kept");
+		assert.ok(
+			failure.summary.length < 500,
+			`summary stays bounded, got ${failure.summary.length} chars`,
+		);
+	} finally {
+		if (previous === undefined) delete process.env.AGENT_SAY_BIN;
+		else process.env.AGENT_SAY_BIN = previous;
+		rmSync(fake.dir, { recursive: true, force: true });
+	}
+});
